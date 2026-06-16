@@ -8012,7 +8012,10 @@ export class DatabaseStorage implements IStorage {
     return { success: true, organization, subscription: subscription ?? null };
   }
 
-  private mapCustomerRowFromLatin1(row: Record<string, unknown>): Record<string, unknown> {
+  private mapCustomerRowFromLatin1(
+    row: Record<string, unknown>,
+    adminEmail = "",
+  ): Record<string, unknown> {
     const str = (key: string) => sanitizeUtf8FromLatin1Bytes(row[key]) ?? "";
     return {
       id: Number(row.id),
@@ -8028,7 +8031,7 @@ export class DatabaseStorage implements IStorage {
       packageName: sanitizeUtf8FromLatin1Bytes(row.package_name),
       billingPackageId:
         row.billing_package_id != null ? Number(row.billing_package_id) : null,
-      adminEmail: sanitizeUtf8FromLatin1Bytes(row.admin_email) ?? "",
+      adminEmail,
       subscriptionPaymentStatus: sanitizeUtf8FromLatin1Bytes(
         row.subscription_payment_status,
       ),
@@ -8045,6 +8048,150 @@ export class DatabaseStorage implements IStorage {
       currency_symbol: sanitizeUtf8FromLatin1Bytes(row.currency_symbol),
       language_code: (row.language_code as string | null) ?? null,
     };
+  }
+
+  /** Read admin emails one row at a time so corrupt UTF-8 in one user does not break the list. */
+  private async loadAdminEmailsByOrganizationViaLatin1(
+    client: import("pg").PoolClient,
+    schema: string,
+    organizationIds: number[],
+  ): Promise<Map<number, string>> {
+    const emailsByOrg = new Map<number, string>();
+    if (organizationIds.length === 0) {
+      return emailsByOrg;
+    }
+
+    try {
+      const { rows: adminRows } = await client.query<{ organization_id: number; id: number }>(
+        `
+          SELECT DISTINCT ON (organization_id) organization_id, id
+          FROM "${schema}"."users"
+          WHERE role = 'admin' AND organization_id = ANY($1::int[])
+          ORDER BY organization_id, id ASC
+        `,
+        [organizationIds],
+      );
+
+      for (const adminRow of adminRows) {
+        const orgId = Number(adminRow.organization_id);
+        const userId = Number(adminRow.id);
+        try {
+          const { rows } = await client.query<{ email: string | null }>(
+            `SELECT email FROM "${schema}"."users" WHERE id = $1 LIMIT 1`,
+            [userId],
+          );
+          emailsByOrg.set(
+            orgId,
+            sanitizeUtf8FromLatin1Bytes(rows[0]?.email) ?? "",
+          );
+        } catch (error) {
+          if (!isInvalidUtf8DatabaseError(error)) {
+            throw error;
+          }
+          emailsByOrg.set(orgId, "");
+        }
+      }
+    } catch (error) {
+      if (!isInvalidUtf8DatabaseError(error)) {
+        throw error;
+      }
+      console.warn(
+        "[DB] Skipping admin email enrichment due to invalid UTF-8 in users table",
+      );
+    }
+
+    return emailsByOrg;
+  }
+
+  private async getAllCustomersOrganizationsOnlyViaLatin1(
+    client: import("pg").PoolClient,
+    schema: string,
+    search?: string,
+    status?: string,
+  ): Promise<any[]> {
+    const params: unknown[] = [];
+    const whereClauses: string[] = [];
+
+    if (status && status !== "all") {
+      params.push(status);
+      whereClauses.push(`o.subscription_status = $${params.length}`);
+    }
+
+    if (search && search.trim() !== "") {
+      const term = `%${search.trim()}%`;
+      params.push(term, term, term);
+      const base = params.length - 2;
+      whereClauses.push(
+        `(o.name ILIKE $${base} OR o.brand_name ILIKE $${base + 1} OR o.subdomain ILIKE $${base + 2})`,
+      );
+    }
+
+    const whereSql =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+    const { rows } = await client.query(
+      `
+      SELECT
+        o.*,
+        (
+          SELECT COUNT(*)::int
+          FROM "${schema}"."users" u2
+          WHERE u2.organization_id = o.id
+        ) AS user_count
+      FROM "${schema}"."organizations" o
+      ${whereSql}
+      ORDER BY o.created_at DESC
+      `,
+      params,
+    );
+
+    let adminEmailsByOrg = new Map<number, string>();
+    const organizationIds = rows.map((row) => Number((row as { id: number }).id));
+    try {
+      adminEmailsByOrg = await this.loadAdminEmailsByOrganizationViaLatin1(
+        client,
+        schema,
+        organizationIds,
+      );
+    } catch {
+      // Admin emails are optional for the organizations list.
+    }
+
+    return rows.map((row) => {
+      const record = row as Record<string, unknown>;
+      const orgId = Number(record.id);
+      const mapped = this.mapCustomerRowFromLatin1(
+        {
+          id: record.id,
+          name: record.name,
+          brand_name: record.brand_name,
+          subdomain: record.subdomain,
+          subscription_status: record.subscription_status,
+          organization_payment_status: record.payment_status,
+          computed_subscription_status: record.subscription_status,
+          created_at: record.created_at,
+          features: record.features,
+          user_count: record.user_count,
+          package_name: null,
+          billing_package_id: null,
+          subscription_payment_status: null,
+          subscription_start: null,
+          subscription_end: null,
+          expires_at: null,
+          days_active: null,
+          expiry_alert_level: "none",
+          days_left: null,
+          stripe_account_id: record.stripe_account_id,
+          stripe_status: record.stripe_status,
+          country_code: record.country_code,
+          currency_code: record.currency_code,
+          currency_symbol: record.currency_symbol,
+          language_code: record.language_code,
+        },
+        adminEmailsByOrg.get(orgId) ?? "",
+      );
+      return mapped;
+    });
   }
 
   private async getAllCustomersViaLatin1Encoding(
@@ -8076,7 +8223,9 @@ export class DatabaseStorage implements IStorage {
       const whereSql =
         whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
-      const { rows } = await client.query(
+      let rows: Record<string, unknown>[];
+      try {
+        ({ rows } = await client.query(
         `
         SELECT
           o.id,
@@ -8095,10 +8244,13 @@ export class DatabaseStorage implements IStorage {
           END AS computed_subscription_status,
           o.created_at,
           o.features,
-          COUNT(u.id)::int AS user_count,
+          (
+            SELECT COUNT(*)::int
+            FROM "${schema}"."users" u2
+            WHERE u2.organization_id = o.id
+          ) AS user_count,
           sp.name AS package_name,
           sp.id AS billing_package_id,
-          MAX(CASE WHEN u.role = 'admin' THEN u.email ELSE NULL END) AS admin_email,
           ss.payment_status AS subscription_payment_status,
           ss.current_period_start AS subscription_start,
           ss.current_period_end AS subscription_end,
@@ -8135,7 +8287,6 @@ export class DatabaseStorage implements IStorage {
           o.currency_symbol,
           o.language_code
         FROM "${schema}"."organizations" o
-        LEFT JOIN "${schema}"."users" u ON o.id = u.organization_id
         LEFT JOIN "${schema}"."saas_subscriptions" ss ON ss.id = (
           SELECT id
           FROM "${schema}"."saas_subscriptions"
@@ -8145,40 +8296,54 @@ export class DatabaseStorage implements IStorage {
         )
         LEFT JOIN "${schema}"."saas_packages" sp ON ss.package_id = sp.id
         ${whereSql}
-        GROUP BY
-          o.id,
-          o.name,
-          o.brand_name,
-          o.subdomain,
-          o.subscription_status,
-          o.payment_status,
-          o.created_at,
-          o.features,
-          o.stripe_account_id,
-          o.stripe_status,
-          o.country_code,
-          o.currency_code,
-          o.currency_symbol,
-          o.language_code,
-          ss.status,
-          ss.payment_status,
-          ss.current_period_start,
-          ss.current_period_end,
-          ss.expires_at,
-          sp.name,
-          sp.id
         ORDER BY o.created_at DESC
         `,
         params,
-      );
+      ));
+      } catch (error) {
+        if (!isInvalidUtf8DatabaseError(error)) {
+          throw error;
+        }
+        console.warn(
+          "[DB] Full customer query failed (invalid UTF-8); using organizations-only loader",
+        );
+        return this.getAllCustomersOrganizationsOnlyViaLatin1(
+          client,
+          schema,
+          search,
+          status,
+        );
+      }
+
+      const organizationIds = rows.map((row) => Number((row as { id: number }).id));
+      let adminEmailsByOrg = new Map<number, string>();
+      try {
+        adminEmailsByOrg = await this.loadAdminEmailsByOrganizationViaLatin1(
+          client,
+          schema,
+          organizationIds,
+        );
+      } catch (error) {
+        if (!isInvalidUtf8DatabaseError(error)) {
+          throw error;
+        }
+        console.warn(
+          "[DB] Continuing without admin emails after invalid UTF-8 in users table",
+        );
+      }
 
       await client.query("SET client_encoding TO 'UTF8'");
       console.warn(
         `[DB] Loaded ${rows.length} customer(s) with LATIN1 fallback (invalid UTF-8 bytes were sanitized)`,
       );
-      return rows.map((row) =>
-        this.mapCustomerRowFromLatin1(row as Record<string, unknown>),
-      );
+      return rows.map((row) => {
+        const record = row as Record<string, unknown>;
+        const orgId = Number(record.id);
+        return this.mapCustomerRowFromLatin1(
+          record,
+          adminEmailsByOrg.get(orgId) ?? "",
+        );
+      });
     } finally {
       await client.query("SET client_encoding TO 'UTF8'").catch(() => undefined);
       client.release();
@@ -8186,8 +8351,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllCustomers(search?: string, status?: string): Promise<any[]> {
-    // Legacy rows may contain invalid UTF-8 bytes; Drizzle/UTF8 reads fail on this DB.
-    return this.getAllCustomersViaLatin1Encoding(search, status);
+    try {
+      return await this.getAllCustomersViaDrizzle(search, status);
+    } catch (error: unknown) {
+      if (!isInvalidUtf8DatabaseError(error)) {
+        throw error;
+      }
+      console.warn(
+        "[DB] getAllCustomers SELECT failed (invalid UTF-8 in a text column); using LATIN1-safe loader",
+      );
+      return this.getAllCustomersViaLatin1Encoding(search, status);
+    }
   }
 
   /** @deprecated Drizzle path fails when org/user text columns contain invalid UTF-8 bytes. */
@@ -8239,17 +8413,13 @@ export class DatabaseStorage implements IStorage {
       `.as('computedSubscriptionStatus'),
       createdAt: organizations.createdAt,
       features: organizations.features,
-      userCount: count(users.id),
+      userCount: sql<number>`(
+        SELECT COUNT(*)::int
+        FROM users
+        WHERE organization_id = ${organizations.id}
+      )`.as('userCount'),
       packageName: saasPackages.name,
       billingPackageId: saasPackages.id,
-      adminEmail: sql<string>`
-        MAX(
-          CASE
-            WHEN ${users.role} = 'admin' THEN ${users.email}
-            ELSE NULL
-          END
-        )
-      `.as('adminEmail'),
       subscriptionPaymentStatus: saasSubscriptions.paymentStatus,
       subscriptionStart: saasSubscriptions.currentPeriodStart,
       subscriptionEnd: saasSubscriptions.currentPeriodEnd,
@@ -8282,32 +8452,8 @@ export class DatabaseStorage implements IStorage {
       language_code: organizations.language_code,
     })
     .from(organizations)
-    .leftJoin(users, eq(organizations.id, users.organizationId))
     .leftJoin(saasSubscriptions, eq(saasSubscriptions.id, latestSubscriptionId))
-    .leftJoin(saasPackages, eq(saasSubscriptions.packageId, saasPackages.id))
-    .groupBy(
-      organizations.id,
-      organizations.name,
-      organizations.brandName,
-      organizations.subdomain,
-      organizations.subscriptionStatus,
-      organizations.paymentStatus,
-      organizations.createdAt,
-      organizations.features,
-      organizations.stripeAccountId,
-      organizations.stripeStatus,
-      organizations.country_code,
-      organizations.currency_code,
-      organizations.currency_symbol,
-      organizations.language_code,
-      saasSubscriptions.status,
-      saasSubscriptions.paymentStatus,
-      saasSubscriptions.currentPeriodStart,
-      saasSubscriptions.currentPeriodEnd,
-      saasSubscriptions.expiresAt,
-      saasPackages.name,
-      saasPackages.id
-    );
+    .leftJoin(saasPackages, eq(saasSubscriptions.packageId, saasPackages.id));
 
     const whereConditions = [];
 
@@ -8329,17 +8475,32 @@ export class DatabaseStorage implements IStorage {
       query = query.where(and(...whereConditions));
     }
 
+    const results = await query.orderBy(desc(organizations.createdAt));
+    const organizationIds = results.map((row) => row.id);
+    let adminEmailsByOrg = new Map<number, string>();
+    const client = await pool.connect();
     try {
-      return await query.orderBy(desc(organizations.createdAt));
-    } catch (error: unknown) {
+      await client.query("SET client_encoding TO 'LATIN1'");
+      adminEmailsByOrg = await this.loadAdminEmailsByOrganizationViaLatin1(
+        client,
+        activeDbSchema,
+        organizationIds,
+      );
+    } catch (error) {
       if (!isInvalidUtf8DatabaseError(error)) {
         throw error;
       }
       console.warn(
-        "[DB] getAllCustomers SELECT failed (invalid UTF-8 in a text column); using LATIN1-safe loader",
+        "[DB] Continuing without admin emails after invalid UTF-8 in users table",
       );
-      return this.getAllCustomersViaLatin1Encoding(search, status);
+    } finally {
+      await client.query("SET client_encoding TO 'UTF8'").catch(() => undefined);
+      client.release();
     }
+    return results.map((row) => ({
+        ...row,
+        adminEmail: adminEmailsByOrg.get(row.id) ?? "",
+    }));
   }
 
   async getCustomerById(customerId: number): Promise<any> {
@@ -8421,22 +8582,51 @@ export class DatabaseStorage implements IStorage {
       return null;
     }
 
-    const [admin] = await db
-      .select({
-        email: users.email,
-        firstName: users.firstName,
-        lastName: users.lastName,
-      })
-      .from(users)
-      .where(and(eq(users.organizationId, customerId), eq(users.role, 'admin')))
-      .orderBy(asc(users.id))
-      .limit(1);
+    let adminEmail: string | null = null;
+    let adminFirstName: string | null = null;
+    let adminLastName: string | null = null;
+
+    try {
+      const [admin] = await db
+        .select({
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(users)
+        .where(and(eq(users.organizationId, customerId), eq(users.role, 'admin')))
+        .orderBy(asc(users.id))
+        .limit(1);
+
+      if (admin) {
+        adminEmail = admin.email;
+        adminFirstName = admin.firstName;
+        adminLastName = admin.lastName;
+      }
+    } catch (error: unknown) {
+      if (!isInvalidUtf8DatabaseError(error)) {
+        throw error;
+      }
+      const client = await pool.connect();
+      try {
+        await client.query("SET client_encoding TO 'LATIN1'");
+        const adminEmailsByOrg = await this.loadAdminEmailsByOrganizationViaLatin1(
+          client,
+          activeDbSchema,
+          [customerId],
+        );
+        adminEmail = adminEmailsByOrg.get(customerId) ?? null;
+      } finally {
+        await client.query("SET client_encoding TO 'UTF8'").catch(() => undefined);
+        client.release();
+      }
+    }
 
     return {
       ...customer,
-      adminEmail: admin?.email || null,
-      adminFirstName: admin?.firstName || null,
-      adminLastName: admin?.lastName || null,
+      adminEmail,
+      adminFirstName,
+      adminLastName,
       billingPackageId: customer.packageId || null,
     };
   }

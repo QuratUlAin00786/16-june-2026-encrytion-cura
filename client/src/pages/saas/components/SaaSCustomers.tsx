@@ -234,7 +234,7 @@ export default function SaaSCustomers() {
     Boolean(editingCustomer);
 
   // Fetch all organizations/customers
-  const { data: customers, isLoading } = useQuery({
+  const { data: customers, isLoading, isError, error } = useQuery({
     queryKey: ['/api/saas/customers', searchTerm, selectedStatus],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -1648,6 +1648,11 @@ export default function SaaSCustomers() {
           </div>
 
           {/* Customers Table */}
+          {isError && (
+            <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              Failed to load organizations: {(error as Error)?.message || "Unknown error"}
+            </div>
+          )}
           <div className="border rounded-lg relative w-full overflow-hidden">
             {isLoading && (
               <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 dark:bg-gray-800/90">
