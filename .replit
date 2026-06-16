@@ -1,0 +1,50 @@
+modules = ["nodejs-20", "web", "bash", "postgresql-16"]
+run = "npm run dev"
+hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
+
+[nix]
+channel = "stable-25_05"
+packages = ["vim", "libuuid"]
+
+[deployment]
+deploymentTarget = "autoscale"
+build = ["npm", "run", "build"]
+run = ["npm", "run", "start"]
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[agent]
+integrations = ["javascript_sendgrid:1.0.0", "javascript_database:1.0.0", "javascript_stripe:1.0.0", "sendgrid:1.0.0", "twilio:1.0.0"]
+expertMode = true
+
+[userenv]
+
+[userenv.shared]
+JWT_SECRET = "3499f7cd73155740272e145369bedf431b57ce52cb49cc8a2a904ce5b056e704"
+SAAS_JWT_SECRET = "MyUltraSecureSecretKey_ChangeThis_123!@#"
+VITE_STRIPE_PUBLIC_KEY = "pk_test_51SaDEdFESZ9zEvOGD27bYhIrU22xieSRck4dDwxvi4rqOZZ1UiNWNzZszfb9JDWGEPf6jNqIXFrXfzCweXsjsoba00LMtPwijb"
+GMAIL_SMTP_USER = "noreply@curaemr.ai"
+GMAIL_SMTP_PASSWORD = "wxndhigmfhgjjklr"

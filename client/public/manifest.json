@@ -1,0 +1,35 @@
+{
+  "name": "Cura - AI-Powered Healthcare Platform by Cura Software Limited",
+  "short_name": "Cura EMR",
+  "description": "Advanced Electronic Medical Records system with AI-powered insights, telemedicine capabilities, and comprehensive practice management tools for modern healthcare providers. Developed by Cura Software Limited.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "id": "cura-emr-platform",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["medical", "health", "business", "productivity"],
+  "lang": "en",
+  "dir": "ltr",
+  "developer": {
+    "name": "Cura Software Limited",
+    "url": "https://curaemr.ai"
+  },
+  "screenshots": [],
+  "prefer_related_applications": false
+}

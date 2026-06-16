@@ -1,0 +1,39 @@
+1. **Appointment Reminder**
+
+"Hello [Patient Name], this is a friendly reminder from Cura Healthcare EMR about your upcoming appointment on [Date] at [Time]. Please contact us at [Contact Number] if you need to reschedule or have any questions. Thank you!"
+
+---
+
+### 2. **Medication Reminder**
+
+"Hello [Patient Name], this is a reminder from Cura Healthcare EMR to take your medication as prescribed. Please follow your doctor’s instructions carefully. If you have any concerns, please contact your healthcare provider at [Contact Number]. Stay healthy!"
+
+---
+
+### 3. **Follow-up Reminder**
+
+"Hello [Patient Name], this is a follow-up reminder from Cura Healthcare EMR regarding your recent appointment or treatment. Please feel free to contact us at [Contact Number] if you have any questions or need further assistance."
+
+---
+
+### 4. **Billing Notice**
+
+"Hello [Patient Name], this is a billing notice from Cura Healthcare EMR. Your payment for the recent service is due on [Due Date]. Please ensure timely payment to avoid any interruptions in service. Contact us at [Contact Number] for assistance."
+
+---
+
+### 5. **Health Check-in**
+
+"Hello [Patient Name], this is a health check-in call from Cura Healthcare EMR. We are reaching out to see how you are doing and to offer any support you may need. Please contact us at [Contact Number] if you have any health concerns or require assistance."
+
+---
+
+### 6. **Emergency Alert**
+
+"Attention [Patient Name], this is an important emergency alert from Cura Healthcare EMR. Please take immediate action as advised by your healthcare provider. If you require urgent assistance, call emergency services or contact us at [Contact Number] immediately."
+
+---
+
+### 7. **Preventive Care Reminder**
+
+"Hello [Patient Name], this is a preventive care reminder from Cura Healthcare EMR. It’s time to schedule your regular health screening or check-up. Please contact us at [Contact Number] to book an appointment and stay proactive about your health."

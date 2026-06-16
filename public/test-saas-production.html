@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SaaS Production Test</title>
+</head>
+<body>
+    <h1>SaaS Production Test</h1>
+    <button id="testLogin">Test SaaS Login</button>
+    <button id="testDebug">Test SaaS Debug</button>
+    <div id="results"></div>
+    
+    <script>
+        function log(message) {
+            console.log(message);
+            const results = document.getElementById('results');
+            results.innerHTML += '<p>' + JSON.stringify(message) + '</p>';
+        }
+
+        document.getElementById('testLogin').onclick = async function() {
+            log('Testing SaaS Login...');
+            try {
+                const response = await fetch('/api/saas/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: 'saas_admin',
+                        password: 'admin123'
+                    })
+                });
+                
+                log('Login Response Status: ' + response.status);
+                log('Login Response Headers: ' + JSON.stringify(Object.fromEntries(response.headers.entries())));
+                
+                const data = await response.json();
+                log('Login Response Data: ' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                log('Login Error: ' + error.message);
+            }
+        };
+
+        document.getElementById('testDebug').onclick = async function() {
+            log('Testing SaaS Debug...');
+            try {
+                const response = await fetch('/api/saas/debug');
+                log('Debug Response Status: ' + response.status);
+                const data = await response.json();
+                log('Debug Response Data: ' + JSON.stringify(data, null, 2));
+            } catch (error) {
+                log('Debug Error: ' + error.message);
+            }
+        };
+    </script>
+</body>
+</html>

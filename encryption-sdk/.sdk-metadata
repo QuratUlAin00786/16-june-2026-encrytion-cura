@@ -1,0 +1,47 @@
+# SDK Metadata
+# This file contains SDK identification and telemetry configuration
+# Generated: 2026-05-18T07:33:53.950Z
+
+SDK_ID=be597e87-1051-4a12-bc5b-1a720faf46df
+SDK_NAME=CuraEmrEncryption
+SDK_VERSION=2.0.0
+LANGUAGE=javascript
+GENERATED_AT=2026-05-18T07:33:53.950Z
+TELEMETRY_ENDPOINT=https://app.inkrypt.ai/api/sdk/telemetry
+TELEMETRY_ENABLED=true
+GENERATOR=FixedEnterpriseSDKGenerator
+GENERATOR_VERSION=2.0.0
+TENANT=5793e1f1-f0ee-40af-a291-1bcb6cd6fcf1
+ENVIRONMENT=production
+# Supported Algorithms (configured during SDK generation)
+ALGORITHMS=AES-128-GCM
+SUPPORTED_ALGORITHMS=AES-128-GCM
+# Vault KMS Configuration
+VAULT_KEK_NAME=pqc-kek-5793e1f1-f0ee-40af-a291-1bcb6cd6fcf1
+VAULT_KEK_ALGORITHM=kyber1024
+VAULT_API_ENDPOINT=https://app.inkrypt.ai/api/vault/
+ENVELOPE_ENCRYPTION_ENABLED=true
+
+# JSON Format
+{
+  "sdkId": "be597e87-1051-4a12-bc5b-1a720faf46df",
+  "sdkName": "CuraEmrEncryption",
+  "sdkVersion": "2.0.0",
+  "language": "javascript",
+  "generatedAt": "2026-05-18T07:33:53.950Z",
+  "telemetryEndpoint": "https://app.inkrypt.ai/api/sdk/telemetry",
+  "telemetryEnabled": true,
+  "algorithms": [
+    "AES-128-GCM"
+  ],
+  "metadata": {
+    "generator": "FixedEnterpriseSDKGenerator",
+    "generatorVersion": "2.0.0",
+    "tenant": "5793e1f1-f0ee-40af-a291-1btestcb6cd6fcf1",
+    "environment": "production"
+  },
+  "vaultKekName": "pqc-kek-5793e1f1-f0ee-40af-a291-1bcb6cd6fcf1",
+  "vaultKekAlgorithm": "kyber1024",
+  "vaultApiEndpoint": "https://app.inkrypt.ai/api/vault/test",
+  "envelopeEncryptionEnabled": true
+}

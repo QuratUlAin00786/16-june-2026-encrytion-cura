@@ -1,0 +1,323 @@
+---
+description: SaaS Subscription Management - Upgrade, Downgrade, Cancel, Billing Cycle Changes with Stripe
+---
+
+# SaaS Subscription Management Implementation Guide
+
+## Overview
+
+This guide outlines the implementation of subscription management features (upgrade, downgrade, cancel, billing cycle changes) for organizations paying the SaaS platform. This is **separate** from Stripe Connect (which handles organizations receiving patient payments).
+
+## Architecture Separation
+
+### Two Independent Stripe Systems:
+
+1. **Stripe Subscriptions** (Platform Billing)
+   - Organizations pay the SaaS platform
+   - Handles: upgrade, downgrade, cancel, billing cycle changes
+   - Uses: `stripe.customers`, `stripe.subscriptions`, `stripe.prices`
+   - Location: `/api/saas/billing/*`
+
+2. **Stripe Connect** (Payment Receiving)
+   - Organizations receive payments from patients
+   - Handles: onboarding, capabilities, charges
+   - Uses: `stripe.accounts` (Express accounts)
+   - Location: `/api/saas/organizations/*/connect-stripe`
+
+**⚠️ DO NOT mix these two systems.**
+
+## Database Schema Requirements
+
+### Organizations Table
+Add these fields if not present:
+```sql
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(64);
+```
+
+### SaaS Packages Table
+Already has:
+- `stripe_price_id` (VARCHAR) - Stripe Price ID for monthly/annual
+
+### SaaS Subscriptions Table
+Already has:
+- `stripe_subscription_id` (VARCHAR) - Stripe Subscription ID
+- `status` (VARCHAR) - active, trial, expired, cancelled
+- `current_period_start` (TIMESTAMP)
+- `current_period_end` (TIMESTAMP)
+- `cancel_at_period_end` (BOOLEAN)
+
+**Add if missing:**
+```sql
+ALTER TABLE saas_subscriptions ADD COLUMN IF NOT EXISTS stripe_customer_id VARCHAR(64);
+ALTER TABLE saas_subscriptions ADD COLUMN IF NOT EXISTS stripe_price_id VARCHAR(64);
+ALTER TABLE saas_subscriptions ADD COLUMN IF NOT EXISTS billing_cycle VARCHAR(20) DEFAULT 'monthly';
+```
+
+## Backend API Endpoints
+
+### 1. Subscribe to Plan
+**POST** `/api/saas/billing/subscribe`
+
+**Request:**
+```json
+{
+  "organizationId": 123,
+  "packageId": 5,
+  "billingCycle": "monthly" | "annual",
+  "paymentMethodId": "pm_xxx" // Optional, for new customers
+}
+```
+
+**Logic:**
+1. Get or create Stripe customer for organization
+2. Get `stripe_price_id` from `saas_packages` based on `billingCycle`
+3. Create Stripe subscription:
+   ```typescript
+   stripe.subscriptions.create({
+     customer: stripeCustomerId,
+     items: [{ price: stripePriceId }],
+     payment_behavior: 'default_incomplete',
+     payment_settings: { payment_method_types: ['card'] },
+     expand: ['latest_invoice.payment_intent']
+   })
+   ```
+4. Save subscription to database with `stripe_subscription_id`
+5. Return subscription details
+
+### 2. Upgrade Plan (Immediate Effect)
+**POST** `/api/saas/billing/upgrade`
+
+**Request:**
+```json
+{
+  "subscriptionId": 456,
+  "newPackageId": 7,
+  "billingCycle": "monthly" | "annual"
+}
+```
+
+**Logic:**
+1. Get current subscription from database
+2. Get new `stripe_price_id` from `saas_packages`
+3. Update Stripe subscription:
+   ```typescript
+   stripe.subscriptions.update(stripeSubscriptionId, {
+     items: [{
+       id: subscription.items.data[0].id,
+       price: newStripePriceId
+     }],
+     proration_behavior: 'create_prorations' // Immediate upgrade with proration
+   })
+   ```
+4. Stripe automatically:
+   - Charges difference immediately
+   - Applies unused credit from old plan
+5. Update database with new plan details
+6. Features update immediately
+
+### 3. Downgrade Plan (Next Billing Cycle)
+**POST** `/api/saas/billing/downgrade`
+
+**Request:**
+```json
+{
+  "subscriptionId": 456,
+  "newPackageId": 3,
+  "billingCycle": "monthly" | "annual"
+}
+```
+
+**Logic:**
+1. Get current subscription from database
+2. Get new `stripe_price_id` from `saas_packages`
+3. **Before downgrade - Validate usage:**
+   - Check storage usage vs new plan limit
+   - Check active users vs new plan limit
+   - If exceeds, return error: "Your current usage exceeds this plan limit. Please reduce usage before downgrading."
+4. Update Stripe subscription:
+   ```typescript
+   stripe.subscriptions.update(stripeSubscriptionId, {
+     items: [{
+       id: subscription.items.data[0].id,
+       price: newStripePriceId
+     }],
+     proration_behavior: 'none', // No immediate charge
+     billing_cycle_anchor: 'unchanged' // Keep current billing date
+   })
+   ```
+5. Update database:
+   - Set new `packageId` and `stripe_price_id`
+   - Keep current `current_period_end`
+   - Status remains "active"
+6. **No refund issued** - downgrade effective at `current_period_end`
+7. Current features remain active until renewal
+
+### 4. Cancel Subscription (Downgrade to Free)
+**POST** `/api/saas/billing/cancel`
+
+**Request:**
+```json
+{
+  "subscriptionId": 456,
+  "immediate": false // true = refund and cancel now, false = cancel at period end
+}
+```
+
+**Logic:**
+1. Get subscription from database
+2. If `immediate === false` (recommended):
+   ```typescript
+   stripe.subscriptions.update(stripeSubscriptionId, {
+     cancel_at_period_end: true
+   })
+   ```
+   - Subscription remains active until `current_period_end`
+   - Update database: `cancel_at_period_end = true`
+   - Features remain active until expiration
+3. If `immediate === true`:
+   ```typescript
+   stripe.subscriptions.cancel(stripeSubscriptionId)
+   // Then manually process refund if needed
+   ```
+   - Immediately downgrade to free plan
+   - Disable paid features
+4. Return confirmation with expiration date
+
+### 5. Change Billing Cycle
+**POST** `/api/saas/billing/change-cycle`
+
+**Request:**
+```json
+{
+  "subscriptionId": 456,
+  "newBillingCycle": "monthly" | "annual"
+}
+```
+
+**Logic:**
+
+**Monthly → Annual:**
+1. Get annual `stripe_price_id` for same package
+2. Update subscription:
+   ```typescript
+   stripe.subscriptions.update(stripeSubscriptionId, {
+     items: [{ id: itemId, price: annualPriceId }],
+     proration_behavior: 'create_prorations'
+   })
+   ```
+3. Change takes effect immediately
+4. Unused monthly portion credited automatically
+
+**Annual → Monthly:**
+1. Get monthly `stripe_price_id` for same package
+2. Update subscription:
+   ```typescript
+   stripe.subscriptions.update(stripeSubscriptionId, {
+     items: [{ id: itemId, price: monthlyPriceId }],
+     proration_behavior: 'none',
+     billing_cycle_anchor: 'unchanged'
+   })
+   ```
+3. Change takes effect at next renewal
+4. If immediate change needed:
+   - Cancel annual subscription
+   - Process refund manually
+   - Create new monthly subscription
+
+### 6. Webhook Handler (Mandatory)
+**POST** `/api/saas/webhooks/stripe`
+
+**Handle Events:**
+- `customer.subscription.created` - New subscription
+- `customer.subscription.updated` - Plan changed, billing cycle changed
+- `customer.subscription.deleted` - Subscription cancelled
+- `invoice.paid` - Payment successful, extend subscription
+- `invoice.payment_failed` - Mark as past_due, send notification
+
+**Example:**
+```typescript
+if (event.type === 'customer.subscription.updated') {
+  const subscription = event.data.object;
+  await updateSubscriptionFromStripe(subscription);
+}
+if (event.type === 'customer.subscription.deleted') {
+  const subscription = event.data.object;
+  // Downgrade to free plan
+  await downgradeToFreePlan(subscription.customer);
+}
+```
+
+## Frontend Implementation
+
+### Location
+`/[tenantSlug]/billing` or `/saas/billing` under "Services & Plans" tab
+
+### UI Components Needed:
+
+1. **Current Plan Display**
+   - Show current plan name, billing cycle, next payment date
+   - Show "Cancel Subscription" button if active
+
+2. **Upgrade/Downgrade Section**
+   - List available plans
+   - Show "Upgrade" for higher plans
+   - Show "Downgrade" for lower plans
+   - Show current plan as "Active"
+
+3. **Billing Cycle Toggle**
+   - Checkbox: "Save $XX with annual billing"
+   - Show savings amount
+   - "Update" button to change cycle
+
+4. **Cancel Subscription Dialog**
+   - Warning message
+   - Show expiration date
+   - Option for immediate cancellation (with refund notice)
+   - Confirmation step
+
+## Important Rules
+
+1. **Never calculate proration manually** - Let Stripe handle it
+2. **Always trust Stripe webhook** for final subscription status
+3. **Do not directly modify plan access** without Stripe confirmation
+4. **Free trials must auto-convert** unless canceled before trial end
+5. **Validate usage before downgrade** - Block if exceeds new plan limits
+6. **Separate Stripe Connect from Subscriptions** - Different modules
+
+## Usage Validation Before Downgrade
+
+Before allowing downgrade, check:
+- Storage usage vs new plan `storageGB` limit
+- Active users vs new plan `maxUsers` limit
+- Active patients vs new plan `maxPatients` limit
+
+If any exceeds, show error:
+```
+"Your current usage exceeds this plan limit. Please reduce usage before downgrading."
+```
+
+## Free Trial Handling
+
+- Free trials must have `trial_end` set in Stripe
+- If not canceled before `trial_end`, auto-convert to paid
+- Webhook `customer.subscription.trial_will_end` - Send reminder 3 days before
+
+## Error Handling
+
+- Stripe API errors should be user-friendly
+- Network errors should retry
+- Invalid plan transitions should be blocked
+- Payment failures should show clear messages
+
+## Testing Checklist
+
+- [ ] Upgrade plan (immediate effect)
+- [ ] Downgrade plan (next billing cycle)
+- [ ] Cancel subscription (at period end)
+- [ ] Cancel subscription (immediate)
+- [ ] Change monthly → annual
+- [ ] Change annual → monthly
+- [ ] Block downgrade if usage exceeds limits
+- [ ] Webhook handling for all events
+- [ ] Free trial auto-conversion
+- [ ] Payment failure handling

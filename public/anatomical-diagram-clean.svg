@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 700" style="background: white;">
+  <!-- Face outline -->
+  <ellipse cx="300" cy="280" rx="120" ry="140" fill="none" stroke="#333" stroke-width="2"/>
+  
+  <!-- Muscle groups - Frontalis -->
+  <path d="M220 180 Q300 160 380 180 Q380 220 300 210 Q220 220 220 180" fill="#cc4444" opacity="0.7"/>
+  <text x="300" y="195" text-anchor="middle" font-size="10" fill="#333">Frontalis</text>
+  
+  <!-- Temporalis -->
+  <path d="M180 200 Q160 220 170 280 Q190 270 200 240 Q190 220 180 200" fill="#cc4444" opacity="0.7"/>
+  <text x="120" y="240" font-size="10" fill="#333">Temporalis</text>
+  <line x1="140" y1="240" x2="175" y2="240" stroke="#333" stroke-width="1"/>
+  
+  <path d="M420 200 Q440 220 430 280 Q410 270 400 240 Q410 220 420 200" fill="#cc4444" opacity="0.7"/>
+  <text x="480" y="240" font-size="10" fill="#333">Temporalis</text>
+  <line x1="460" y1="240" x2="425" y2="240" stroke="#333" stroke-width="1"/>
+  
+  <!-- Orbicularis Oculi -->
+  <ellipse cx="260" cy="240" rx="25" ry="15" fill="none" stroke="#cc4444" stroke-width="3"/>
+  <ellipse cx="340" cy="240" rx="25" ry="15" fill="none" stroke="#cc4444" stroke-width="3"/>
+  <text x="180" y="245" font-size="10" fill="#333">Orbicularis Oculi</text>
+  <line x1="210" y1="245" x2="235" y2="245" stroke="#333" stroke-width="1"/>
+  
+  <!-- Eye details -->
+  <circle cx="260" cy="240" r="8" fill="white" stroke="#333"/>
+  <circle cx="260" cy="240" r="4" fill="#333"/>
+  <circle cx="340" cy="240" r="8" fill="white" stroke="#333"/>
+  <circle cx="340" cy="240" r="4" fill="#333"/>
+  
+  <!-- Levator Labii Superioris -->
+  <path d="M270 280 Q300 270 330 280 Q320 300 300 295 Q280 300 270 280" fill="#cc4444" opacity="0.7"/>
+  <text x="420" y="290" font-size="10" fill="#333">Levator Labii Superioris</text>
+  <line x1="340" y1="290" x2="410" y2="290" stroke="#333" stroke-width="1"/>
+  
+  <!-- Zygomaticus Major -->
+  <path d="M240 300 Q220 320 230 340 Q250 330 255 315 Q250 305 240 300" fill="#cc4444" opacity="0.7"/>
+  <path d="M360 300 Q380 320 370 340 Q350 330 345 315 Q350 305 360 300" fill="#cc4444" opacity="0.7"/>
+  <text x="140" y="325" font-size="10" fill="#333">Zygomaticus Major</text>
+  <line x1="180" y1="325" x2="235" y2="325" stroke="#333" stroke-width="1"/>
+  
+  <!-- Masseter -->
+  <path d="M200 340 Q180 360 190 400 Q210 390 220 365 Q215 350 200 340" fill="#cc4444" opacity="0.7"/>
+  <path d="M400 340 Q420 360 410 400 Q390 390 380 365 Q385 350 400 340" fill="#cc4444" opacity="0.7"/>
+  <text x="120" y="375" font-size="10" fill="#333">Masseter</text>
+  <line x1="150" y1="375" x2="195" y2="375" stroke="#333" stroke-width="1"/>
+  
+  <!-- Buccinator -->
+  <path d="M230 350 Q250 360 270 350 Q265 370 250 375 Q235 370 230 350" fill="#cc4444" opacity="0.7"/>
+  <path d="M330 350 Q350 360 370 350 Q365 370 350 375 Q335 370 330 350" fill="#cc4444" opacity="0.7"/>
+  <text x="450" y="365" font-size="10" fill="#333">Buccinator</text>
+  <line x1="380" y1="365" x2="440" y2="365" stroke="#333" stroke-width="1"/>
+  
+  <!-- Orbicularis Oris -->
+  <ellipse cx="300" cy="340" rx="35" ry="12" fill="none" stroke="#cc4444" stroke-width="3"/>
+  <text x="380" y="345" font-size="10" fill="#333">Orbicularis Oris</text>
+  <line x1="340" y1="345" x2="370" y2="345" stroke="#333" stroke-width="1"/>
+  
+  <!-- Depressor Labii Inferioris -->
+  <path d="M275 360 Q290 370 305 360 Q300 380 290 385 Q285 380 275 360" fill="#cc4444" opacity="0.7"/>
+  <text x="380" y="395" font-size="10" fill="#333">Depressor Labii Inferioris</text>
+  <line x1="310" y1="380" x2="370" y2="390" stroke="#333" stroke-width="1"/>
+  
+  <!-- Depressor Anguli Oris -->
+  <path d="M250 380 Q240 390 245 405 Q260 400 265 390 Q260 385 250 380" fill="#cc4444" opacity="0.7"/>
+  <path d="M350 380 Q360 390 355 405 Q340 400 335 390 Q340 385 350 380" fill="#cc4444" opacity="0.7"/>
+  <text x="400" y="420" font-size="10" fill="#333">Depressor Anguli Oris</text>
+  <line x1="360" y1="395" x2="390" y2="415" stroke="#333" stroke-width="1"/>
+  
+  <!-- Mentalis -->
+  <path d="M280 400 Q300 410 320 400 Q315 420 300 425 Q285 420 280 400" fill="#cc4444" opacity="0.7"/>
+  <text x="140" y="420" font-size="10" fill="#333">Mentalis</text>
+  <line x1="170" y1="420" x2="280" y2="415" stroke="#333" stroke-width="1"/>
+  
+  <!-- Platysma (neck area) -->
+  <path d="M250 440 Q300 460 350 440 Q340 500 300 520 Q260 500 250 440" fill="#cc4444" opacity="0.7"/>
+  <text x="140" y="480" font-size="10" fill="#333">Platysma</text>
+  <line x1="170" y1="480" x2="250" y2="470" stroke="#333" stroke-width="1"/>
+  
+  <!-- Neck outline -->
+  <path d="M250 440 Q300 450 350 440 Q340 520 300 540 Q260 520 250 440" fill="none" stroke="#333" stroke-width="2"/>
+  
+  <!-- Additional anatomical labels -->
+  <text x="480" y="180" font-size="10" fill="#333">Corrugator Supercilii</text>
+  <line x1="350" y1="200" x2="470" y2="180" stroke="#333" stroke-width="1"/>
+  
+  <text x="450" y="200" font-size="10" fill="#333">Levator Palpebrae</text>
+  <line x1="345" y1="235" x2="440" y2="200" stroke="#333" stroke-width="1"/>
+  
+  <text x="450" y="320" font-size="10" fill="#333">Levator Labii Superioris</text>
+  <text x="450" y="332" font-size="10" fill="#333">Alaeque Nasi</text>
+  
+  <text x="480" y="440" font-size="10" fill="#333">Risorius</text>
+  <line x1="370" y1="355" x2="470" y2="440" stroke="#333" stroke-width="1"/>
+</svg>

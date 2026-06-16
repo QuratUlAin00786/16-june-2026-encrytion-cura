@@ -1,0 +1,370 @@
+{
+  "project": {
+    "name": "Cura Healthcare EMR",
+    "version": "1.0.0",
+    "description": "Comprehensive healthcare management platform with telemedicine capabilities",
+    "totalEndpoints": 250,
+    "generatedAt": "2025-12-03T12:00:00.000Z"
+  },
+  "authentication": {
+    "type": "JWT Bearer Token",
+    "headerName": "Authorization",
+    "headerFormat": "Bearer <token>",
+    "additionalHeaders": {
+      "X-Tenant-Subdomain": "Organization subdomain for multi-tenant isolation"
+    }
+  },
+  "baseUrl": "/api",
+  "categories": [
+    {
+      "name": "Authentication",
+      "endpoints": [
+        {"method": "POST", "path": "/api/auth/login", "auth": false, "roles": ["all"], "description": "Tenant-specific login"},
+        {"method": "POST", "path": "/api/auth/universal-login", "auth": false, "roles": ["all"], "description": "Global login"},
+        {"method": "POST", "path": "/api/auth/forgot-password", "auth": false, "roles": ["all"], "description": "Request password reset"},
+        {"method": "POST", "path": "/api/auth/reset-password", "auth": false, "roles": ["all"], "description": "Reset password with token"},
+        {"method": "GET", "path": "/api/auth/validate", "auth": true, "roles": ["all"], "description": "Validate JWT token"},
+        {"method": "PATCH", "path": "/api/user/change-password", "auth": true, "roles": ["all"], "description": "Change password"},
+        {"method": "POST", "path": "/api/saas/login", "auth": false, "roles": ["saas_admin"], "description": "SaaS admin login"}
+      ]
+    },
+    {
+      "name": "Health & Status",
+      "endpoints": [
+        {"method": "GET", "path": "/api/health", "auth": false, "description": "Health check"},
+        {"method": "GET", "path": "/health", "auth": false, "description": "Health check (alt)"},
+        {"method": "GET", "path": "/healthz", "auth": false, "description": "Kubernetes health"},
+        {"method": "GET", "path": "/api/status", "auth": false, "description": "Full system status"}
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "endpoints": [
+        {"method": "GET", "path": "/api/dashboard/stats", "auth": true, "roles": ["all"], "description": "Dashboard statistics"},
+        {"method": "GET", "path": "/api/dashboard/ai-insights", "auth": true, "roles": ["all"], "description": "AI insights"}
+      ]
+    },
+    {
+      "name": "Patients",
+      "endpoints": [
+        {"method": "GET", "path": "/api/patients", "auth": true, "roles": ["all"], "description": "List patients"},
+        {"method": "GET", "path": "/api/patients/:id", "auth": true, "roles": ["all"], "description": "Get patient by ID"},
+        {"method": "POST", "path": "/api/patients", "auth": true, "roles": ["admin", "doctor", "nurse", "receptionist"], "description": "Create patient"},
+        {"method": "PUT", "path": "/api/patients/:id", "auth": true, "roles": ["admin", "doctor", "nurse"], "description": "Update patient"},
+        {"method": "DELETE", "path": "/api/patients/:id", "auth": true, "roles": ["admin"], "description": "Delete patient"},
+        {"method": "GET", "path": "/api/patients/check-email", "auth": true, "roles": ["all"], "description": "Check email availability"},
+        {"method": "GET", "path": "/api/patients/:id/records", "auth": true, "roles": ["all"], "description": "Get patient records"},
+        {"method": "GET", "path": "/api/patients/:id/prescriptions", "auth": true, "roles": ["all"], "description": "Get patient prescriptions"},
+        {"method": "GET", "path": "/api/patients/:id/appointments", "auth": true, "roles": ["all"], "description": "Get patient appointments"},
+        {"method": "GET", "path": "/api/patients/:id/lab-results", "auth": true, "roles": ["all"], "description": "Get patient lab results"},
+        {"method": "GET", "path": "/api/patients/my-prescriptions", "auth": true, "roles": ["patient"], "description": "Get current patient prescriptions"},
+        {"method": "GET", "path": "/api/patients/health-score", "auth": true, "roles": ["all"], "description": "Get patient health score"}
+      ]
+    },
+    {
+      "name": "Appointments",
+      "endpoints": [
+        {"method": "GET", "path": "/api/appointments", "auth": true, "roles": ["all"], "description": "List appointments"},
+        {"method": "GET", "path": "/api/appointments/:id", "auth": true, "roles": ["all"], "description": "Get appointment by ID"},
+        {"method": "POST", "path": "/api/appointments", "auth": true, "roles": ["all"], "description": "Create appointment"},
+        {"method": "PUT", "path": "/api/appointments/:id", "auth": true, "roles": ["all"], "description": "Update appointment"},
+        {"method": "PATCH", "path": "/api/appointments/:id", "auth": true, "roles": ["all"], "description": "Partial update appointment"},
+        {"method": "DELETE", "path": "/api/appointments/:id", "auth": true, "roles": ["admin"], "description": "Delete appointment"},
+        {"method": "GET", "path": "/api/appointments/available-slots", "auth": true, "roles": ["all"], "description": "Get available slots"},
+        {"method": "GET", "path": "/api/appointments/sse", "auth": true, "roles": ["all"], "description": "Real-time updates (SSE)"},
+        {"method": "POST", "path": "/api/appointments/:id/confirm", "auth": true, "roles": ["all"], "description": "Confirm appointment"},
+        {"method": "POST", "path": "/api/appointments/:id/cancel", "auth": true, "roles": ["all"], "description": "Cancel appointment"},
+        {"method": "POST", "path": "/api/appointments/:id/complete", "auth": true, "roles": ["doctor", "nurse"], "description": "Complete appointment"},
+        {"method": "POST", "path": "/api/appointments/:id/start-video", "auth": true, "roles": ["all"], "description": "Start video call"},
+        {"method": "GET", "path": "/api/appointments/:id/video-token", "auth": true, "roles": ["all"], "description": "Get video token"}
+      ]
+    },
+    {
+      "name": "Medical Records",
+      "endpoints": [
+        {"method": "GET", "path": "/api/medical-records", "auth": true, "roles": ["all"], "description": "List medical records"},
+        {"method": "GET", "path": "/api/medical-records/:id", "auth": true, "roles": ["all"], "description": "Get record by ID"},
+        {"method": "POST", "path": "/api/medical-records", "auth": true, "roles": ["doctor", "nurse"], "description": "Create record"},
+        {"method": "PUT", "path": "/api/medical-records/:id", "auth": true, "roles": ["doctor", "nurse"], "description": "Update record"},
+        {"method": "DELETE", "path": "/api/medical-records/:id", "auth": true, "roles": ["admin"], "description": "Delete record"},
+        {"method": "POST", "path": "/api/medical-records/:id/e-sign", "auth": true, "roles": ["doctor"], "description": "E-sign record"}
+      ]
+    },
+    {
+      "name": "Prescriptions",
+      "endpoints": [
+        {"method": "GET", "path": "/api/prescriptions", "auth": true, "roles": ["all"], "description": "List prescriptions"},
+        {"method": "GET", "path": "/api/prescriptions/:id", "auth": true, "roles": ["all"], "description": "Get prescription by ID"},
+        {"method": "GET", "path": "/api/prescriptions/patient/:patientId", "auth": true, "roles": ["all"], "description": "Get patient prescriptions"},
+        {"method": "POST", "path": "/api/prescriptions", "auth": true, "roles": ["doctor"], "description": "Create prescription"},
+        {"method": "PATCH", "path": "/api/prescriptions/:id", "auth": true, "roles": ["doctor", "nurse"], "description": "Update prescription"},
+        {"method": "DELETE", "path": "/api/prescriptions/:id", "auth": true, "roles": ["doctor", "admin"], "description": "Delete prescription"},
+        {"method": "POST", "path": "/api/prescriptions/:id/send-to-pharmacy", "auth": true, "roles": ["doctor", "nurse"], "description": "Send to pharmacy"},
+        {"method": "POST", "path": "/api/prescriptions/:id/e-sign", "auth": true, "roles": ["doctor"], "description": "E-sign prescription"}
+      ]
+    },
+    {
+      "name": "Lab Results",
+      "endpoints": [
+        {"method": "GET", "path": "/api/lab-results", "auth": true, "roles": ["all"], "description": "List lab results"},
+        {"method": "GET", "path": "/api/lab-results/:id", "auth": true, "roles": ["all"], "description": "Get lab result by ID"},
+        {"method": "POST", "path": "/api/lab-results", "auth": true, "roles": ["doctor", "nurse"], "description": "Create lab order"},
+        {"method": "PUT", "path": "/api/lab-results/:id", "auth": true, "roles": ["lab_technician"], "description": "Update lab result"},
+        {"method": "DELETE", "path": "/api/lab-results/:id", "auth": true, "roles": ["admin"], "description": "Delete lab result"},
+        {"method": "PATCH", "path": "/api/lab-results/:id/toggle-sample-collected", "auth": true, "roles": ["sample_taker", "lab_technician"], "description": "Toggle sample status"},
+        {"method": "POST", "path": "/api/lab-results/:id/collect-sample", "auth": true, "roles": ["sample_taker", "lab_technician"], "description": "Mark sample collected"},
+        {"method": "POST", "path": "/api/lab-results/:id/generate-pdf", "auth": true, "roles": ["non-patient"], "description": "Generate PDF report"},
+        {"method": "POST", "path": "/api/lab-results/:id/e-sign", "auth": true, "roles": ["doctor"], "description": "E-sign results"},
+        {"method": "GET", "path": "/api/lab-results/with-invoices", "auth": true, "roles": ["all"], "description": "Lab results with invoices"},
+        {"method": "GET", "path": "/api/lab-technician/tests", "auth": true, "roles": ["lab_technician", "admin"], "description": "Tests for lab technician"}
+      ]
+    },
+    {
+      "name": "Invoices & Billing",
+      "endpoints": [
+        {"method": "GET", "path": "/api/invoices", "auth": true, "roles": ["all"], "description": "List invoices"},
+        {"method": "GET", "path": "/api/invoices/:id", "auth": true, "roles": ["all"], "description": "Get invoice by ID"},
+        {"method": "POST", "path": "/api/invoices", "auth": true, "roles": ["admin", "receptionist"], "description": "Create invoice"},
+        {"method": "PATCH", "path": "/api/invoices/:id", "auth": true, "roles": ["admin"], "description": "Update invoice"},
+        {"method": "DELETE", "path": "/api/invoices/:id", "auth": true, "roles": ["admin"], "description": "Delete invoice"},
+        {"method": "GET", "path": "/api/invoices/with-services", "auth": true, "roles": ["all"], "description": "Invoices with services"},
+        {"method": "GET", "path": "/api/invoices/by-service", "auth": true, "roles": ["all"], "description": "Invoices by service"},
+        {"method": "POST", "path": "/api/create-payment-intent", "auth": true, "roles": ["all"], "description": "Stripe payment intent"},
+        {"method": "GET", "path": "/api/billing-history", "auth": true, "roles": ["admin"], "description": "Get billing history"},
+        {"method": "GET", "path": "/api/billing-history/:paymentId/invoice", "auth": true, "roles": ["admin"], "description": "Download invoice PDF"},
+        {"method": "GET", "path": "/api/subscriptions/current", "auth": true, "roles": ["admin"], "description": "Get current subscription"}
+      ]
+    },
+    {
+      "name": "Notifications",
+      "endpoints": [
+        {"method": "GET", "path": "/api/notifications", "auth": true, "roles": ["all"], "description": "List notifications"},
+        {"method": "GET", "path": "/api/notifications/unread-count", "auth": true, "roles": ["all"], "description": "Get unread count"},
+        {"method": "PATCH", "path": "/api/notifications/:id/read", "auth": true, "roles": ["all"], "description": "Mark as read"},
+        {"method": "PATCH", "path": "/api/notifications/mark-all-read", "auth": true, "roles": ["all"], "description": "Mark all as read"},
+        {"method": "DELETE", "path": "/api/notifications/:id", "auth": true, "roles": ["all"], "description": "Delete notification"}
+      ]
+    },
+    {
+      "name": "Users",
+      "endpoints": [
+        {"method": "GET", "path": "/api/users", "auth": true, "roles": ["all"], "description": "List users"},
+        {"method": "GET", "path": "/api/users/:id", "auth": true, "roles": ["admin"], "description": "Get user by ID"},
+        {"method": "POST", "path": "/api/users", "auth": true, "roles": ["admin"], "description": "Create user"},
+        {"method": "PUT", "path": "/api/users/:id", "auth": true, "roles": ["admin"], "description": "Update user"},
+        {"method": "PATCH", "path": "/api/users/:id", "auth": true, "roles": ["admin"], "description": "Partial update user"},
+        {"method": "DELETE", "path": "/api/users/:id", "auth": true, "roles": ["admin"], "description": "Delete user"},
+        {"method": "GET", "path": "/api/users/current", "auth": true, "roles": ["all"], "description": "Get current user"},
+        {"method": "GET", "path": "/api/users/doctors", "auth": true, "roles": ["all"], "description": "List doctors"},
+        {"method": "GET", "path": "/api/users/by-role/:role", "auth": true, "roles": ["all"], "description": "Users by role"}
+      ]
+    },
+    {
+      "name": "Roles & Permissions",
+      "endpoints": [
+        {"method": "GET", "path": "/api/roles", "auth": true, "roles": ["all"], "description": "List all roles"},
+        {"method": "GET", "path": "/api/roles/:id", "auth": true, "roles": ["admin"], "description": "Get role by ID"},
+        {"method": "POST", "path": "/api/roles", "auth": true, "roles": ["admin"], "description": "Create role"},
+        {"method": "PUT", "path": "/api/roles/:id", "auth": true, "roles": ["admin"], "description": "Update role"},
+        {"method": "DELETE", "path": "/api/roles/:id", "auth": true, "roles": ["admin"], "description": "Delete role"}
+      ]
+    },
+    {
+      "name": "Organizations",
+      "endpoints": [
+        {"method": "GET", "path": "/api/tenant/info", "auth": true, "roles": ["all"], "description": "Get current organization"},
+        {"method": "PATCH", "path": "/api/organization/settings", "auth": true, "roles": ["admin"], "description": "Update org settings"}
+      ]
+    },
+    {
+      "name": "GDPR Compliance",
+      "endpoints": [
+        {"method": "POST", "path": "/api/gdpr/consent", "auth": true, "roles": ["admin", "patient"], "description": "Record consent"},
+        {"method": "PATCH", "path": "/api/gdpr/consent/:id/withdraw", "auth": true, "roles": ["admin", "patient"], "description": "Withdraw consent"},
+        {"method": "POST", "path": "/api/gdpr/data-request", "auth": true, "roles": ["admin", "patient"], "description": "Submit data request"},
+        {"method": "GET", "path": "/api/gdpr/patient/:patientId/data-export", "auth": true, "roles": ["admin", "doctor"], "description": "Export patient data"},
+        {"method": "POST", "path": "/api/gdpr/patient/:patientId/erasure", "auth": true, "roles": ["admin"], "description": "Request data erasure"},
+        {"method": "GET", "path": "/api/gdpr/patient/:patientId/consent-status", "auth": true, "roles": ["admin", "doctor", "patient"], "description": "Check consent status"},
+        {"method": "GET", "path": "/api/gdpr/compliance-report", "auth": true, "roles": ["admin"], "description": "Generate compliance report"}
+      ]
+    },
+    {
+      "name": "QuickBooks Integration",
+      "endpoints": [
+        {"method": "GET", "path": "/api/quickbooks/auth/callback", "auth": false, "description": "OAuth callback"},
+        {"method": "GET", "path": "/api/quickbooks/status", "auth": true, "roles": ["non-patient"], "description": "Check connection status"},
+        {"method": "POST", "path": "/api/quickbooks/connect", "auth": true, "roles": ["admin"], "description": "Initiate connection"},
+        {"method": "POST", "path": "/api/quickbooks/disconnect", "auth": true, "roles": ["admin"], "description": "Disconnect QuickBooks"},
+        {"method": "GET", "path": "/api/quickbooks/data/company-info", "auth": true, "roles": ["non-patient"], "description": "Get company info"},
+        {"method": "GET", "path": "/api/quickbooks/data/invoices", "auth": true, "roles": ["non-patient"], "description": "Get QB invoices"},
+        {"method": "GET", "path": "/api/quickbooks/data/profit-loss", "auth": true, "roles": ["non-patient"], "description": "Get P&L report"},
+        {"method": "GET", "path": "/api/quickbooks/data/expenses", "auth": true, "roles": ["non-patient"], "description": "Get expenses"},
+        {"method": "GET", "path": "/api/quickbooks/data/accounts", "auth": true, "roles": ["non-patient"], "description": "Get chart of accounts"},
+        {"method": "GET", "path": "/api/quickbooks/data/customers", "auth": true, "roles": ["non-patient"], "description": "Get customers"}
+      ]
+    },
+    {
+      "name": "Telemedicine (LiveKit)",
+      "endpoints": [
+        {"method": "POST", "path": "/api/livekit/token", "auth": true, "roles": ["all"], "description": "Get LiveKit access token"},
+        {"method": "POST", "path": "/api/livekit/room", "auth": true, "roles": ["doctor", "nurse"], "description": "Create LiveKit room"},
+        {"method": "GET", "path": "/api/livekit/rooms", "auth": true, "roles": ["all"], "description": "List active rooms"},
+        {"method": "DELETE", "path": "/api/livekit/room/:roomName", "auth": true, "roles": ["doctor", "nurse"], "description": "Close room"},
+        {"method": "POST", "path": "/api/telemedicine/start-call", "auth": true, "roles": ["doctor", "nurse"], "description": "Start video call"},
+        {"method": "POST", "path": "/api/telemedicine/end-call", "auth": true, "roles": ["doctor", "nurse"], "description": "End video call"}
+      ]
+    },
+    {
+      "name": "AI Services",
+      "endpoints": [
+        {"method": "POST", "path": "/api/ai/generate-treatment-plan", "auth": true, "roles": ["admin", "doctor"], "description": "Generate treatment plan"},
+        {"method": "POST", "path": "/api/ai/generate-insights", "auth": true, "roles": ["admin", "doctor"], "description": "Generate AI insights"},
+        {"method": "POST", "path": "/api/ai/transcribe", "auth": true, "roles": ["doctor", "nurse"], "description": "Transcribe audio"},
+        {"method": "POST", "path": "/api/ai/chat", "auth": true, "roles": ["all"], "description": "AI chat assistant"},
+        {"method": "POST", "path": "/api/ai/summarize-record", "auth": true, "roles": ["doctor"], "description": "Summarize medical record"}
+      ]
+    },
+    {
+      "name": "Mobile API - Doctor",
+      "endpoints": [
+        {"method": "GET", "path": "/api/mobile/doctor/dashboard", "auth": true, "roles": ["doctor"], "description": "Doctor dashboard"},
+        {"method": "GET", "path": "/api/mobile/doctor/patients", "auth": true, "roles": ["doctor", "nurse"], "description": "Doctor's patients"},
+        {"method": "GET", "path": "/api/mobile/doctor/appointments", "auth": true, "roles": ["doctor", "nurse"], "description": "Doctor's appointments"},
+        {"method": "POST", "path": "/api/mobile/doctor/appointments/:id/accept", "auth": true, "roles": ["doctor"], "description": "Accept appointment"},
+        {"method": "POST", "path": "/api/mobile/doctor/appointments/:id/reject", "auth": true, "roles": ["doctor"], "description": "Reject appointment"},
+        {"method": "GET", "path": "/api/mobile/doctor/prescriptions", "auth": true, "roles": ["doctor", "nurse"], "description": "Doctor's prescriptions"},
+        {"method": "POST", "path": "/api/mobile/doctor/prescriptions", "auth": true, "roles": ["doctor"], "description": "Create prescription"}
+      ]
+    },
+    {
+      "name": "Mobile API - Patient",
+      "endpoints": [
+        {"method": "GET", "path": "/api/mobile/patient/dashboard", "auth": true, "roles": ["patient"], "description": "Patient dashboard"},
+        {"method": "GET", "path": "/api/mobile/patient/appointments", "auth": true, "roles": ["patient"], "description": "Patient appointments"},
+        {"method": "POST", "path": "/api/mobile/patient/appointments", "auth": true, "roles": ["patient"], "description": "Book appointment"},
+        {"method": "DELETE", "path": "/api/mobile/patient/appointments/:id", "auth": true, "roles": ["patient"], "description": "Cancel appointment"},
+        {"method": "GET", "path": "/api/mobile/patient/prescriptions", "auth": true, "roles": ["patient"], "description": "Patient prescriptions"},
+        {"method": "GET", "path": "/api/mobile/patient/medical-records", "auth": true, "roles": ["patient"], "description": "Patient records"},
+        {"method": "GET", "path": "/api/mobile/patient/profile", "auth": true, "roles": ["patient"], "description": "Patient profile"},
+        {"method": "GET", "path": "/api/mobile/doctors", "auth": true, "roles": ["patient"], "description": "Available doctors"},
+        {"method": "POST", "path": "/api/mobile/video/start-consultation", "auth": true, "roles": ["patient"], "description": "Start video consult"}
+      ]
+    },
+    {
+      "name": "SaaS Administration",
+      "endpoints": [
+        {"method": "POST", "path": "/api/saas/login", "auth": false, "roles": ["saas_admin"], "description": "SaaS admin login"},
+        {"method": "GET", "path": "/api/saas/debug", "auth": false, "description": "Debug information"},
+        {"method": "GET", "path": "/api/saas/dashboard", "auth": true, "roles": ["saas_admin"], "description": "SaaS dashboard stats"},
+        {"method": "GET", "path": "/api/saas/organizations", "auth": true, "roles": ["saas_admin"], "description": "List organizations"},
+        {"method": "POST", "path": "/api/saas/organizations", "auth": true, "roles": ["saas_admin"], "description": "Create organization"},
+        {"method": "PUT", "path": "/api/saas/organizations/:id", "auth": true, "roles": ["saas_admin"], "description": "Update organization"},
+        {"method": "DELETE", "path": "/api/saas/organizations/:id", "auth": true, "roles": ["saas_admin"], "description": "Delete organization"},
+        {"method": "GET", "path": "/api/saas/subscriptions", "auth": true, "roles": ["saas_admin"], "description": "List subscriptions"},
+        {"method": "POST", "path": "/api/saas/subscriptions", "auth": true, "roles": ["saas_admin"], "description": "Create subscription"},
+        {"method": "PATCH", "path": "/api/saas/subscriptions/:id", "auth": true, "roles": ["saas_admin"], "description": "Update subscription"},
+        {"method": "GET", "path": "/api/saas/packages", "auth": true, "roles": ["saas_admin"], "description": "List packages"},
+        {"method": "POST", "path": "/api/saas/packages", "auth": true, "roles": ["saas_admin"], "description": "Create package"},
+        {"method": "PUT", "path": "/api/saas/packages/:id", "auth": true, "roles": ["saas_admin"], "description": "Update package"},
+        {"method": "DELETE", "path": "/api/saas/packages/:id", "auth": true, "roles": ["saas_admin"], "description": "Delete package"},
+        {"method": "GET", "path": "/api/saas/payments", "auth": true, "roles": ["saas_admin"], "description": "List payments"},
+        {"method": "POST", "path": "/api/saas/payments", "auth": true, "roles": ["saas_admin"], "description": "Record payment"},
+        {"method": "GET", "path": "/api/saas/audit-logs", "auth": true, "roles": ["saas_admin"], "description": "Audit logs"},
+        {"method": "GET", "path": "/api/website/packages", "auth": false, "description": "Public packages list"}
+      ]
+    },
+    {
+      "name": "Pricing Management",
+      "endpoints": [
+        {"method": "GET", "path": "/api/pricing/doctors-fees", "auth": true, "roles": ["admin"], "description": "List doctor fees"},
+        {"method": "GET", "path": "/api/pricing/doctors-fees/:id", "auth": true, "roles": ["admin"], "description": "Get fee by ID"},
+        {"method": "POST", "path": "/api/pricing/doctors-fees", "auth": true, "roles": ["admin"], "description": "Create fee"},
+        {"method": "PATCH", "path": "/api/pricing/doctors-fees/:id", "auth": true, "roles": ["admin"], "description": "Update fee"},
+        {"method": "DELETE", "path": "/api/pricing/doctors-fees/:id", "auth": true, "roles": ["admin"], "description": "Delete fee"},
+        {"method": "GET", "path": "/api/pricing/lab-tests", "auth": true, "roles": ["admin", "doctor"], "description": "List lab test prices"},
+        {"method": "GET", "path": "/api/pricing/lab-tests/:id", "auth": true, "roles": ["admin", "doctor"], "description": "Get test price by ID"},
+        {"method": "POST", "path": "/api/pricing/lab-tests", "auth": true, "roles": ["admin"], "description": "Create test price"},
+        {"method": "PATCH", "path": "/api/pricing/lab-tests/:id", "auth": true, "roles": ["admin"], "description": "Update test price"},
+        {"method": "DELETE", "path": "/api/pricing/lab-tests/:id", "auth": true, "roles": ["admin"], "description": "Delete test price"},
+        {"method": "GET", "path": "/api/pricing/imaging", "auth": true, "roles": ["all"], "description": "List imaging prices"},
+        {"method": "GET", "path": "/api/pricing/imaging/:id", "auth": true, "roles": ["all"], "description": "Get imaging price"},
+        {"method": "POST", "path": "/api/pricing/imaging", "auth": true, "roles": ["admin"], "description": "Create imaging price"},
+        {"method": "PATCH", "path": "/api/pricing/imaging/:id", "auth": true, "roles": ["admin"], "description": "Update imaging price"},
+        {"method": "DELETE", "path": "/api/pricing/imaging/:id", "auth": true, "roles": ["admin"], "description": "Delete imaging price"}
+      ]
+    },
+    {
+      "name": "Symptom Checker",
+      "endpoints": [
+        {"method": "POST", "path": "/api/symptom-checker/analyze", "auth": true, "roles": ["all"], "description": "Analyze symptoms (AI)"},
+        {"method": "GET", "path": "/api/symptom-checker/history", "auth": true, "roles": ["all"], "description": "Get analysis history"}
+      ]
+    },
+    {
+      "name": "Clinic Configuration",
+      "endpoints": [
+        {"method": "GET", "path": "/api/clinic-headers", "auth": true, "roles": ["all"], "description": "Get clinic headers"},
+        {"method": "POST", "path": "/api/clinic-headers", "auth": true, "roles": ["admin"], "description": "Create/update headers"},
+        {"method": "GET", "path": "/api/clinic-footers", "auth": true, "roles": ["all"], "description": "Get clinic footers"},
+        {"method": "POST", "path": "/api/clinic-footers", "auth": true, "roles": ["admin"], "description": "Create/update footers"}
+      ]
+    },
+    {
+      "name": "Shifts & Scheduling",
+      "endpoints": [
+        {"method": "GET", "path": "/api/shifts", "auth": true, "roles": ["admin"], "description": "List all shifts"},
+        {"method": "GET", "path": "/api/shifts/staff/:staffId", "auth": true, "roles": ["admin"], "description": "Shifts by staff"},
+        {"method": "GET", "path": "/api/default-shifts", "auth": true, "roles": ["all"], "description": "List default shifts"},
+        {"method": "GET", "path": "/api/default-shifts/:userId", "auth": true, "roles": ["all"], "description": "User's default shifts"},
+        {"method": "PATCH", "path": "/api/default-shifts/:userId", "auth": true, "roles": ["admin"], "description": "Update default shifts"},
+        {"method": "POST", "path": "/api/default-shifts/initialize", "auth": true, "roles": ["admin"], "description": "Initialize shifts"},
+        {"method": "DELETE", "path": "/api/default-shifts/all", "auth": true, "roles": ["admin"], "description": "Delete all shifts"},
+        {"method": "DELETE", "path": "/api/default-shifts/:userId", "auth": true, "roles": ["admin"], "description": "Delete user shifts"}
+      ]
+    }
+  ],
+  "websocket": {
+    "transport": "Socket.IO",
+    "events": {
+      "clientToServer": [
+        {"event": "connect", "description": "Establish connection"},
+        {"event": "add-user", "payload": {"userId": "string", "deviceId": "string"}, "description": "Register user presence"},
+        {"event": "remove-user", "payload": {"userId": "string"}, "description": "Unregister user"},
+        {"event": "call-user", "payload": {"to": "string", "offer": "object"}, "description": "Initiate call"},
+        {"event": "accept-call", "payload": {"to": "string", "answer": "object"}, "description": "Accept incoming call"},
+        {"event": "reject-call", "payload": {"to": "string"}, "description": "Reject incoming call"},
+        {"event": "end-call", "payload": {"to": "string"}, "description": "End active call"}
+      ],
+      "serverToClient": [
+        {"event": "online-users", "payload": ["string"], "description": "Online users list"},
+        {"event": "incoming-call", "payload": {"from": "string", "callerName": "string", "offer": "object"}, "description": "Incoming video call notification"},
+        {"event": "call-accepted", "payload": {"from": "string", "answer": "object"}, "description": "Call was accepted"},
+        {"event": "call-rejected", "payload": {"from": "string"}, "description": "Call was rejected"},
+        {"event": "call-ended", "payload": {"from": "string"}, "description": "Call ended"},
+        {"event": "notification", "payload": {"type": "string", "message": "string", "data": "object"}, "description": "New notification"},
+        {"event": "appointment-update", "payload": {"action": "string", "appointment": "object"}, "description": "Appointment changed"}
+      ]
+    }
+  },
+  "rateLimiting": {
+    "authentication": "5 requests per minute",
+    "generalApi": "100 requests per minute",
+    "fileUploads": "10 requests per minute"
+  },
+  "errorFormat": {
+    "structure": {
+      "error": "string (error message)",
+      "details": "string (additional details, development only)"
+    },
+    "statusCodes": {
+      "200": "Success",
+      "201": "Created",
+      "400": "Bad Request",
+      "401": "Unauthorized",
+      "403": "Forbidden",
+      "404": "Not Found",
+      "409": "Conflict",
+      "500": "Internal Server Error"
+    }
+  }
+}

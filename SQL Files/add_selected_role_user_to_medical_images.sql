@@ -1,0 +1,1 @@
+-- Add selected_role and selected_user_id fields to medical_images tabl

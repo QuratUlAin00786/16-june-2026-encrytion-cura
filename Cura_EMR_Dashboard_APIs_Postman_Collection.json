@@ -1,0 +1,747 @@
+{
+  "info": {
+    "name": "Cura EMR - Dashboard APIs (Admin, Doctor, Nurse, Patient)",
+    "description": "Complete dashboard API collection for all user roles with headers, payloads, and expected responses",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "cura-emr-dashboard"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{auth_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://app.curaemr.ai/api",
+      "type": "string"
+    },
+    {
+      "key": "local_url",
+      "value": "http://localhost:1100/api",
+      "type": "string"
+    },
+    {
+      "key": "tenant_subdomain",
+      "value": "demo",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Universal Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    if (jsonData.token) {",
+                  "        pm.collectionVariables.set('auth_token', jsonData.token);",
+                  "        pm.collectionVariables.set('tenant_subdomain', jsonData.organization?.subdomain || 'demo');",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/universal-login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "universal-login"]
+            },
+            "description": "Login to get authentication token. Update email and password in body."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Dashboard APIs",
+      "item": [
+        {
+          "name": "Get Dashboard Stats (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/stats",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "stats"]
+            },
+            "description": "Get dashboard statistics for admin role. Returns total patients, today's appointments, AI suggestions, and revenue."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Tenant-Subdomain",
+                    "value": "{{tenant_subdomain}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/dashboard/stats",
+                  "host": ["{{base_url}}"],
+                  "path": ["dashboard", "stats"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"totalPatients\": 150,\n  \"todayAppointments\": 12,\n  \"aiSuggestions\": 5,\n  \"revenue\": 50000\n}"
+            },
+            {
+              "name": "Error Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/dashboard/stats",
+                  "host": ["{{base_url}}"],
+                  "path": ["dashboard", "stats"]
+                }
+              },
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": \"Failed to fetch dashboard stats\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get AI Insights (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/ai-insights",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "ai-insights"]
+            },
+            "description": "Get AI insights for the organization. Returns up to 10 AI insights."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Tenant-Subdomain",
+                    "value": "{{tenant_subdomain}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/dashboard/ai-insights",
+                  "host": ["{{base_url}}"],
+                  "path": ["dashboard", "ai-insights"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "[\n  {\n    \"id\": 1,\n    \"type\": \"patient_risk\",\n    \"message\": \"Patient shows high risk factors\",\n    \"confidence\": \"0.85\",\n    \"patientId\": 1,\n    \"organizationId\": 1,\n    \"createdAt\": \"2025-01-28T10:00:00Z\"\n  }\n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Doctor Dashboard APIs",
+      "item": [
+        {
+          "name": "Get Doctor Dashboard (Mobile - Version 1)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/doctor/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "doctor", "dashboard"]
+            },
+            "description": "Get doctor dashboard data. Returns today's appointments count, total patients, pending prescriptions, and upcoming appointments list. Requires doctor role."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Tenant-Subdomain",
+                    "value": "{{tenant_subdomain}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/mobile/doctor/dashboard",
+                  "host": ["{{base_url}}"],
+                  "path": ["mobile", "doctor", "dashboard"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"todayAppointments\": 5,\n  \"totalPatients\": 150,\n  \"pendingPrescriptions\": 3,\n  \"upcomingAppointments\": [\n    {\n      \"id\": 1,\n      \"patientName\": \"Patient 1\",\n      \"time\": \"2025-01-28T10:00:00Z\",\n      \"type\": \"consultation\",\n      \"status\": \"scheduled\"\n    },\n    {\n      \"id\": 2,\n      \"patientName\": \"Patient 2\",\n      \"time\": \"2025-01-28T11:00:00Z\",\n      \"type\": \"follow_up\",\n      \"status\": \"scheduled\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "Unauthorized Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/mobile/doctor/dashboard",
+                  "host": ["{{base_url}}"],
+                  "path": ["mobile", "doctor", "dashboard"]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": \"Unauthorized\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Doctor Dashboard (Mobile - Version 2 with Role Check)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/doctor/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "doctor", "dashboard"]
+            },
+            "description": "Alternative doctor dashboard endpoint with explicit role requirement. Requires doctor role. Returns similar data structure."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Tenant-Subdomain",
+                    "value": "{{tenant_subdomain}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/mobile/doctor/dashboard",
+                  "host": ["{{base_url}}"],
+                  "path": ["mobile", "doctor", "dashboard"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"todayAppointments\": 5,\n  \"totalPatients\": 150,\n  \"pendingPrescriptions\": 3,\n  \"upcomingAppointments\": [\n    {\n      \"id\": 1,\n      \"patientName\": \"Patient Name\",\n      \"time\": \"2025-01-28T10:00:00Z\",\n      \"type\": \"consultation\",\n      \"status\": \"scheduled\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Doctor Dashboard Stats (Web)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/stats",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "stats"]
+            },
+            "description": "Doctor can also access the general dashboard stats endpoint. Returns organization-wide statistics."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Nurse Dashboard APIs",
+      "item": [
+        {
+          "name": "Get Dashboard Stats (Nurse)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/stats",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "stats"]
+            },
+            "description": "Nurse can access dashboard stats. Returns organization-wide statistics."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Tenant-Subdomain",
+                    "value": "{{tenant_subdomain}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/dashboard/stats",
+                  "host": ["{{base_url}}"],
+                  "path": ["dashboard", "stats"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"totalPatients\": 150,\n  \"todayAppointments\": 12,\n  \"aiSuggestions\": 5,\n  \"revenue\": 50000\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get AI Insights (Nurse)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/dashboard/ai-insights",
+              "host": ["{{base_url}}"],
+              "path": ["dashboard", "ai-insights"]
+            },
+            "description": "Nurse can access AI insights. Returns organization-wide AI insights."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Clinical Insights (Nurse)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/clinical/insights",
+              "host": ["{{base_url}}"],
+              "path": ["clinical", "insights"]
+            },
+            "description": "Get clinical insights. Requires doctor, nurse, or admin role. Returns up to 50 AI insights with transformed confidence values."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Patient Dashboard APIs",
+      "item": [
+        {
+          "name": "Get Patient Dashboard (Mobile - Version 1)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/patient/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "patient", "dashboard"]
+            },
+            "description": "Get patient dashboard data. Returns patient info, upcoming appointments count, active prescriptions count, total records, and recent appointments. Requires patient role."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Tenant-Subdomain",
+                    "value": "{{tenant_subdomain}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/mobile/patient/dashboard",
+                  "host": ["{{base_url}}"],
+                  "path": ["mobile", "patient", "dashboard"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"patientInfo\": {\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"+1234567890\",\n    \"patientId\": \"P001\"\n  },\n  \"upcomingAppointments\": 2,\n  \"activePrescriptions\": 1,\n  \"totalRecords\": 5,\n  \"recentAppointments\": [\n    {\n      \"id\": 1,\n      \"title\": \"Follow-up Consultation\",\n      \"date\": \"2025-01-28T10:00:00Z\",\n      \"status\": \"scheduled\"\n    }\n  ]\n}"
+            },
+            {
+              "name": "Patient Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/mobile/patient/dashboard",
+                  "host": ["{{base_url}}"],
+                  "path": ["mobile", "patient", "dashboard"]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"error\": \"Patient not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Patient Dashboard (Mobile - Version 2 with Role Check)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              },
+              {
+                "key": "X-Tenant-Subdomain",
+                "value": "{{tenant_subdomain}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/mobile/patient/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["mobile", "patient", "dashboard"]
+            },
+            "description": "Alternative patient dashboard endpoint with explicit role requirement. Requires patient role. Returns upcoming appointments count, active prescriptions count, medical records count, and next appointment details."
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{auth_token}}"
+                  },
+                  {
+                    "key": "X-Tenant-Subdomain",
+                    "value": "{{tenant_subdomain}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/mobile/patient/dashboard",
+                  "host": ["{{base_url}}"],
+                  "path": ["mobile", "patient", "dashboard"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"upcomingAppointments\": 2,\n  \"activePrescriptions\": 1,\n  \"medicalRecords\": 5,\n  \"nextAppointment\": {\n    \"id\": 1,\n    \"patientId\": 1,\n    \"providerId\": 1,\n    \"scheduledAt\": \"2025-01-28T10:00:00Z\",\n    \"type\": \"consultation\",\n    \"status\": \"scheduled\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

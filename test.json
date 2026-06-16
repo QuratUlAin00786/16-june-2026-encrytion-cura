@@ -1,0 +1,182 @@
+{
+    "modules": {
+        "dashboard": {
+            "view": true,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "patients": {
+            "view": true,
+            "create": true,
+            "edit": true,
+            "delete": false
+        },
+        "appointments": {
+            "view": true,
+            "create": true,
+            "edit": true,
+            "delete": false
+        },
+        "medicalRecords": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "prescriptions": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "billing": {
+            "view": true,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "analytics": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "userManagement": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "shiftManagement": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "settings": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "aiInsights": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "messaging": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "telemedicine": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "labResults": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "medicalImaging": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "forms": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "integrations": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "automation": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "patientPortal": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "populationHealth": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "voiceDocumentation": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "inventory": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "gdprCompliance": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        },
+        "subscription": {
+            "view": false,
+            "create": false,
+            "edit": false,
+            "delete": false
+        }
+    },
+    "fields": {
+        "patientSensitiveInfo": {
+            "view": false,
+            "edit": false
+        },
+        "financialData": {
+            "view": false,
+            "edit": false
+        },
+        "medicalHistory": {
+            "view": false,
+            "edit": false
+        },
+        "prescriptionDetails": {
+            "view": false,
+            "edit": false
+        },
+        "labResults": {
+            "view": false,
+            "edit": false
+        },
+        "imagingResults": {
+            "view": false,
+            "edit": false
+        },
+        "billingInformation": {
+            "view": false,
+            "edit": false
+        },
+        "insuranceDetails": {
+            "view": false,
+            "edit": false
+        }
+    }
+}

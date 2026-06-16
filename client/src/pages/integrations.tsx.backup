@@ -1,0 +1,954 @@
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { 
+  Plus,
+  Settings,
+  Zap,
+  Database,
+  Globe,
+  Key,
+  CheckCircle,
+  AlertTriangle,
+  ExternalLink,
+  Code,
+  Webhook,
+  Mail,
+  Smartphone,
+  Calendar,
+  FileText,
+  Activity,
+  Shield,
+  Trash2,
+  RefreshCw,
+  ArrowLeft
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
+
+interface Integration {
+  id: string;
+  name: string;
+  description: string;
+  category: 'messaging' | 'clinical' | 'billing' | 'analytics' | 'compliance' | 'workflow';
+  status: 'connected' | 'disconnected' | 'error' | 'pending';
+  provider: string;
+  icon: string;
+  features: string[];
+  lastSync?: string;
+  syncFrequency: string;
+  config: {
+    apiKey?: string;
+    webhookUrl?: string;
+    settings: Record<string, any>;
+  };
+  isActive: boolean;
+  connectionCount: number;
+  errorMessage?: string;
+}
+
+interface Webhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  status: 'active' | 'inactive' | 'error';
+  lastTriggered?: string;
+  totalCalls: number;
+  successRate: number;
+  headers: Record<string, string>;
+  retryPolicy: 'none' | 'linear' | 'exponential';
+  timeout: number;
+}
+
+interface ApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  permissions: string[];
+  lastUsed?: string;
+  expiresAt?: string;
+  isActive: boolean;
+  usageCount: number;
+  rateLimit: number;
+}
+
+export default function IntegrationsPage() {
+  const [, setLocation] = useLocation();
+  const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
+  const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false);
+  const [isWebhookDialogOpen, setIsWebhookDialogOpen] = useState(false);
+  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+  const [isMarketplaceDialogOpen, setIsMarketplaceDialogOpen] = useState(false);
+  const [selectedMarketplaceIntegration, setSelectedMarketplaceIntegration] = useState<any>(null);
+  const [isIntegrationDetailOpen, setIsIntegrationDetailOpen] = useState(false);
+  const { toast } = useToast();
+
+  const { data: integrations = [], isLoading: integrationsLoading } = useQuery({
+    queryKey: ['/api/integrations'],
+  });
+
+  const { data: webhooks = [], isLoading: webhooksLoading } = useQuery({
+    queryKey: ['/api/integrations/webhooks'],
+  });
+
+  const { data: apiKeys = [], isLoading: apiKeysLoading } = useQuery({
+    queryKey: ['/api/integrations/api-keys'],
+  });
+
+  const connectIntegrationMutation = useMutation({
+    mutationFn: async (integrationData: any) => {
+      const response = await fetch('/api/integrations/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(integrationData),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/integrations'] });
+      setIsConnectionDialogOpen(false);
+      toast({
+        title: "Integration Connected",
+        description: "The integration has been successfully connected.",
+      });
+    }
+  });
+
+  const createWebhookMutation = useMutation({
+    mutationFn: async (webhookData: any) => {
+      const response = await fetch('/api/integrations/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookData),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/integrations/webhooks'] });
+      setIsWebhookDialogOpen(false);
+      toast({
+        title: "Webhook Created",
+        description: "The webhook has been successfully created.",
+      });
+    }
+  });
+
+  const createApiKeyMutation = useMutation({
+    mutationFn: async (apiKeyData: any) => {
+      const response = await fetch('/api/integrations/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(apiKeyData),
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/integrations/api-keys'] });
+      setIsApiKeyDialogOpen(false);
+      toast({
+        title: "API Key Created",
+        description: "A new API key has been generated.",
+      });
+    }
+  });
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'connected': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'error': return <AlertTriangle className="h-4 w-4 text-red-500" />;
+      case 'pending': return <RefreshCw className="h-4 w-4 text-yellow-500 animate-spin" />;
+      default: return <Settings className="h-4 w-4 text-gray-500" />;
+    }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'messaging': return <Mail className="h-5 w-5" />;
+      case 'clinical': return <Activity className="h-5 w-5" />;
+      case 'billing': return <FileText className="h-5 w-5" />;
+      case 'analytics': return <Database className="h-5 w-5" />;
+      case 'compliance': return <Shield className="h-5 w-5" />;
+      case 'workflow': return <Zap className="h-5 w-5" />;
+      default: return <Settings className="h-5 w-5" />;
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'connected': return <Badge className="bg-green-100 text-green-800">Connected</Badge>;
+      case 'error': return <Badge variant="destructive">Error</Badge>;
+      case 'pending': return <Badge variant="secondary">Pending</Badge>;
+      case 'active': return <Badge className="bg-green-100 text-green-800">Active</Badge>;
+      case 'inactive': return <Badge variant="secondary">Inactive</Badge>;
+      default: return <Badge variant="outline">Disconnected</Badge>;
+    }
+  };
+
+  const handleConnectIntegration = (category: string) => {
+    // Simulate connecting to integration
+    connectIntegrationMutation.mutate({
+      category,
+      name: `${category.charAt(0).toUpperCase() + category.slice(1)} Integration`,
+      provider: `${category}-provider`,
+      status: 'connected'
+    });
+  };
+
+  const handleViewIntegrationDetails = (integration: any) => {
+    setSelectedMarketplaceIntegration(integration);
+    setIsIntegrationDetailOpen(true);
+  };
+
+  const getIntegrationDetails = (name: string) => {
+    const details = {
+      "Microsoft Teams Health": {
+        description: "Secure healthcare communications platform built on Microsoft Teams infrastructure",
+        features: ["HIPAA Compliant Messaging", "Video Consultations", "File Sharing", "Integration with Office 365", "Multi-factor Authentication"],
+        pricing: "£12/user/month",
+        setup: "Quick setup with SSO integration",
+        compliance: ["HIPAA", "GDPR", "SOC 2"],
+        support: "24/7 Enterprise Support"
+      },
+      "Salesforce Health Cloud": {
+        description: "Comprehensive patient relationship management platform for healthcare providers",
+        features: ["360° Patient View", "Care Coordination", "Patient Engagement", "Health Analytics", "Mobile Access"],
+        pricing: "£150/user/month",
+        setup: "Professional implementation required",
+        compliance: ["HIPAA", "GDPR", "ISO 27001"],
+        support: "Dedicated Success Manager"
+      },
+      "AWS HealthLake": {
+        description: "HIPAA-eligible service that helps healthcare organizations store, transform, and analyze health data",
+        features: ["FHIR R4 Support", "Natural Language Processing", "Medical Ontologies", "Data Lake Storage", "Analytics"],
+        pricing: "Pay-as-you-go from £0.65/GB",
+        setup: "Technical setup required",
+        compliance: ["HIPAA", "GDPR", "HITRUST"],
+        support: "AWS Technical Support"
+      },
+      "Google Cloud Healthcare": {
+        description: "Cloud-based healthcare APIs and data management solutions",
+        features: ["FHIR API", "DICOM Store", "HL7v2 Store", "Healthcare Natural Language AI", "De-identification"],
+        pricing: "£0.40/1K API calls",
+        setup: "Developer setup required",
+        compliance: ["HIPAA", "GDPR", "ISO 27001"],
+        support: "Google Cloud Support"
+      }
+    };
+    return details[name as keyof typeof details] || {
+      description: "Professional healthcare integration solution",
+      features: ["Healthcare Integration", "Secure Data Transfer", "Compliance Ready"],
+      pricing: "Contact for pricing",
+      setup: "Standard setup process",
+      compliance: ["HIPAA", "GDPR"],
+      support: "Standard Support"
+    };
+  };
+
+  if (integrationsLoading || webhooksLoading || apiKeysLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center space-x-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocation("/")}
+            className="flex items-center space-x-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span>Back</span>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Integrations</h1>
+            <p className="text-gray-600 mt-1">Connect external services and manage API access</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <Dialog open={isConnectionDialogOpen} onOpenChange={setIsConnectionDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Plus className="h-4 w-4 mr-2" />
+                Add Integration
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Add New Integration</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-6">
+                {/* Integration Categories */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => handleConnectIntegration('messaging')}>
+                    <CardContent className="p-4 text-center">
+                      <Mail className="h-8 w-8 mx-auto mb-2 text-blue-500" />
+                      <h3 className="font-medium">Messaging</h3>
+                      <p className="text-sm text-gray-600 mt-1">SMS, Email, WhatsApp</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => handleConnectIntegration('clinical')}>
+                    <CardContent className="p-4 text-center">
+                      <Activity className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                      <h3 className="font-medium">Clinical</h3>
+                      <p className="text-sm text-gray-600 mt-1">HL7, FHIR, Labs</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => handleConnectIntegration('billing')}>
+                    <CardContent className="p-4 text-center">
+                      <FileText className="h-8 w-8 mx-auto mb-2 text-purple-500" />
+                      <h3 className="font-medium">Billing</h3>
+                      <p className="text-sm text-gray-600 mt-1">Payment, Insurance</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => handleConnectIntegration('analytics')}>
+                    <CardContent className="p-4 text-center">
+                      <Database className="h-8 w-8 mx-auto mb-2 text-orange-500" />
+                      <h3 className="font-medium">Analytics</h3>
+                      <p className="text-sm text-gray-600 mt-1">Reports, BI Tools</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => handleConnectIntegration('compliance')}>
+                    <CardContent className="p-4 text-center">
+                      <Shield className="h-8 w-8 mx-auto mb-2 text-red-500" />
+                      <h3 className="font-medium">Compliance</h3>
+                      <p className="text-sm text-gray-600 mt-1">HIPAA, Audit Tools</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => handleConnectIntegration('workflow')}>
+                    <CardContent className="p-4 text-center">
+                      <Zap className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
+                      <h3 className="font-medium">Workflow</h3>
+                      <p className="text-sm text-gray-600 mt-1">Automation, APIs</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Popular Integrations */}
+                <div>
+                  <h3 className="font-medium mb-3">Popular Integrations</h3>
+                  <div className="space-y-2">
+                    {[
+                      { name: "Twilio SMS", category: "messaging", description: "Send SMS notifications and reminders" },
+                      { name: "HL7 FHIR", category: "clinical", description: "Exchange clinical data with other systems" },
+                      { name: "Stripe Payment", category: "billing", description: "Process patient payments securely" },
+                      { name: "Google Analytics", category: "analytics", description: "Track website and app usage" }
+                    ].map((integration) => (
+                      <div key={integration.name} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <div>
+                          <h4 className="font-medium">{integration.name}</h4>
+                          <p className="text-sm text-gray-600">{integration.description}</p>
+                        </div>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleConnectIntegration(integration.category);
+                          }}
+                        >
+                          Connect
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+
+
+                {/* Popular This Month */}
+                <div>
+                  <h3 className="text-lg font-semibold mb-4">Popular This Month</h3>
+                  <div className="space-y-3">
+                    {[
+                      { name: "Microsoft Teams Health", description: "Secure healthcare communications", trend: "+15%" },
+                      { name: "Salesforce Health Cloud", description: "Patient relationship management", trend: "+12%" },
+                      { name: "AWS HealthLake", description: "Healthcare data lake solution", trend: "+8%" },
+                      { name: "Google Cloud Healthcare", description: "Cloud-based healthcare APIs", trend: "+6%" }
+                    ].map((integration) => (
+                      <div key={integration.name} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <div>
+                          <h5 className="font-medium">{integration.name}</h5>
+                          <p className="text-sm text-gray-600">{integration.description}</p>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <Badge className="bg-green-100 text-green-800">{integration.trend}</Badge>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleViewIntegrationDetails(integration)}
+                          >
+                            View Details
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* Integration Details Dialog */}
+      <Dialog open={isIntegrationDetailOpen} onOpenChange={setIsIntegrationDetailOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{selectedMarketplaceIntegration?.name} Integration</DialogTitle>
+          </DialogHeader>
+          {selectedMarketplaceIntegration && (
+            <div className="space-y-6">
+              {(() => {
+                const details = getIntegrationDetails(selectedMarketplaceIntegration.name);
+                return (
+                  <>
+                    {/* Overview */}
+                    <div>
+                      <h4 className="font-semibold mb-3">Overview</h4>
+                      <p className="text-gray-700">{details.description}</p>
+                    </div>
+
+                    {/* Features */}
+                    <div>
+                      <h4 className="font-semibold mb-3">Key Features</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {details.features.map((feature, index) => (
+                          <div key={index} className="flex items-center space-x-2">
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                            <span className="text-sm">{feature}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Pricing & Setup */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-semibold mb-2">Pricing</h4>
+                        <p className="text-lg font-bold text-green-600">{details.pricing}</p>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold mb-2">Setup Time</h4>
+                        <p className="text-gray-700">{details.setup}</p>
+                      </div>
+                    </div>
+
+                    {/* Compliance */}
+                    <div>
+                      <h4 className="font-semibold mb-3">Compliance & Security</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {details.compliance.map((cert, index) => (
+                          <Badge key={index} className="bg-blue-100 text-blue-800">
+                            {cert}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Support */}
+                    <div>
+                      <h4 className="font-semibold mb-2">Support</h4>
+                      <p className="text-gray-700">{details.support}</p>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex justify-end space-x-3 pt-4 border-t">
+                      <Button variant="outline" onClick={() => setIsIntegrationDetailOpen(false)}>
+                        Close
+                      </Button>
+                      <Button 
+                        onClick={() => {
+                          handleConnectIntegration(selectedMarketplaceIntegration.name.toLowerCase());
+                          setIsIntegrationDetailOpen(false);
+                        }}
+                      >
+                        Install Integration
+                      </Button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Connected</p>
+                <p className="text-2xl font-bold">
+                  {integrations.filter((i: Integration) => i.status === 'connected').length}
+                </p>
+              </div>
+              <CheckCircle className="h-8 w-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Active Webhooks</p>
+                <p className="text-2xl font-bold">
+                  {webhooks.filter((w: Webhook) => w.status === 'active').length}
+                </p>
+              </div>
+              <Webhook className="h-8 w-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">API Keys</p>
+                <p className="text-2xl font-bold">
+                  {apiKeys.filter((k: ApiKey) => k.isActive).length}
+                </p>
+              </div>
+              <Key className="h-8 w-8 text-purple-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Sync Issues</p>
+                <p className="text-2xl font-bold">
+                  {integrations.filter((i: Integration) => i.status === 'error').length}
+                </p>
+              </div>
+              <AlertTriangle className="h-8 w-8 text-red-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="integrations" className="w-full">
+        <TabsList>
+          <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="webhooks">Webhooks</TabsTrigger>
+          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="integrations" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {integrations.length === 0 ? (
+              <Card className="col-span-full">
+                <CardContent className="p-8 text-center">
+                  <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <h3 className="text-lg font-medium mb-2">No integrations configured</h3>
+                  <p className="text-sm text-gray-600">Connect external services to enhance your EMR system.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              integrations.map((integration: Integration) => (
+                <Card key={integration.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          {getCategoryIcon(integration.category)}
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">{integration.name}</CardTitle>
+                          <p className="text-sm text-gray-600">{integration.provider}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(integration.status)}
+                        {getStatusBadge(integration.status)}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-600 mb-4">{integration.description}</p>
+                    
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Sync Frequency:</span>
+                        <span className="font-medium">{integration.syncFrequency}</span>
+                      </div>
+                      {integration.lastSync && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">Last Sync:</span>
+                          <span className="font-medium">{integration.lastSync}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Connections:</span>
+                        <span className="font-medium">{integration.connectionCount}</span>
+                      </div>
+                    </div>
+
+                    {integration.features.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm font-medium mb-2">Features:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {integration.features.slice(0, 3).map((feature, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {feature}
+                            </Badge>
+                          ))}
+                          {integration.features.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{integration.features.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {integration.errorMessage && (
+                      <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <p className="text-sm text-red-600">{integration.errorMessage}</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 mt-4 pt-4 border-t">
+                      <Switch
+                        checked={integration.isActive}
+                        onCheckedChange={() => {}}
+                      />
+                      <Button variant="outline" size="sm">
+                        <Settings className="h-4 w-4 mr-2" />
+                        Configure
+                      </Button>
+                      <Button variant="outline" size="sm">
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="webhooks" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Webhook Management</h2>
+            <Dialog open={isWebhookDialogOpen} onOpenChange={setIsWebhookDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Webhook
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Create New Webhook</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Webhook Name</Label>
+                    <Input placeholder="Enter webhook name" />
+                  </div>
+                  <div>
+                    <Label>Endpoint URL</Label>
+                    <Input placeholder="https://your-endpoint.com/webhook" />
+                  </div>
+                  <div>
+                    <Label>Events</Label>
+                    <Select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select events to listen to" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="patient.created">Patient Created</SelectItem>
+                        <SelectItem value="appointment.scheduled">Appointment Scheduled</SelectItem>
+                        <SelectItem value="form.submitted">Form Submitted</SelectItem>
+                        <SelectItem value="lab.result">Lab Result Ready</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Retry Policy</Label>
+                      <Select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select retry policy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          <SelectItem value="linear">Linear</SelectItem>
+                          <SelectItem value="exponential">Exponential</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Timeout (seconds)</Label>
+                      <Input type="number" placeholder="30" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsWebhookDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={() => createWebhookMutation.mutate({
+                      name: "Test Webhook",
+                      url: "https://example.com/webhook",
+                      events: ["patient.created"],
+                      retryPolicy: "exponential",
+                      timeout: 30
+                    })}>
+                      Create Webhook
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {webhooks.length === 0 ? (
+              <Card className="col-span-2">
+                <CardContent className="p-8 text-center">
+                  <Webhook className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <h3 className="text-lg font-medium mb-2">No webhooks configured</h3>
+                  <p className="text-sm text-gray-600">Create webhooks to receive real-time notifications.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              webhooks.map((webhook: Webhook) => (
+                <Card key={webhook.id}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{webhook.name}</CardTitle>
+                      {getStatusBadge(webhook.status)}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="text-sm">
+                        <span className="text-gray-600">URL:</span>
+                        <p className="font-mono text-xs break-all mt-1">{webhook.url}</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-gray-600">Total Calls:</span>
+                          <span className="ml-2 font-medium">{webhook.totalCalls}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-600">Success Rate:</span>
+                          <span className="ml-2 font-medium">{webhook.successRate}%</span>
+                        </div>
+                      </div>
+
+                      {webhook.lastTriggered && (
+                        <div className="text-sm">
+                          <span className="text-gray-600">Last Triggered:</span>
+                          <span className="ml-2 font-medium">{webhook.lastTriggered}</span>
+                        </div>
+                      )}
+
+                      <div className="text-sm">
+                        <span className="text-gray-600">Events:</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {webhook.events.map((event, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {event}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-3 border-t">
+                        <Button variant="outline" size="sm">
+                          <Settings className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Code className="h-4 w-4 mr-2" />
+                          Test
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="api-keys" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">API Key Management</h2>
+            <Dialog open={isApiKeyDialogOpen} onOpenChange={setIsApiKeyDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Generate API Key
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Generate New API Key</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label>Key Name</Label>
+                    <Input placeholder="Enter key name" />
+                  </div>
+                  <div>
+                    <Label>Permissions</Label>
+                    <Select>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select permissions" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="read">Read Only</SelectItem>
+                        <SelectItem value="write">Read & Write</SelectItem>
+                        <SelectItem value="admin">Full Access</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Rate Limit (requests/hour)</Label>
+                    <Input type="number" placeholder="1000" />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsApiKeyDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={() => createApiKeyMutation.mutate({
+                      name: "Test API Key",
+                      permissions: ["read", "write"],
+                      rateLimit: 1000
+                    })}>
+                      Generate Key
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <div className="space-y-4">
+            {apiKeys.length === 0 ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <h3 className="text-lg font-medium mb-2">No API keys generated</h3>
+                  <p className="text-sm text-gray-600">Generate API keys for external integrations.</p>
+                </CardContent>
+              </Card>
+            ) : (
+              apiKeys.map((apiKey: ApiKey) => (
+                <Card key={apiKey.id}>
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-medium">{apiKey.name}</h3>
+                          {getStatusBadge(apiKey.isActive ? 'active' : 'inactive')}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                          <div>
+                            <span className="text-gray-600">Key:</span>
+                            <p className="font-mono">{apiKey.keyPrefix}...</p>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Usage:</span>
+                            <span className="ml-2 font-medium">{apiKey.usageCount}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Rate Limit:</span>
+                            <span className="ml-2 font-medium">{apiKey.rateLimit}/hr</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-600">Last Used:</span>
+                            <span className="ml-2 font-medium">
+                              {apiKey.lastUsed || 'Never'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="mt-2">
+                          <span className="text-gray-600 text-sm">Permissions:</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {apiKey.permissions.map((permission, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {permission}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={apiKey.isActive}
+                          onCheckedChange={() => {}}
+                        />
+                        <Button variant="outline" size="sm">
+                          <Settings className="h-4 w-4" />
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="marketplace" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Integration Marketplace</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-gray-500">
+                <Globe className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <h3 className="text-lg font-medium mb-2">Coming Soon</h3>
+                <p className="text-sm">Discover and install integrations from our marketplace.</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
