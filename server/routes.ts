@@ -13,7 +13,7 @@ import { authService } from "./services/auth";
 import { aiService } from "./services/ai";
 import { registerSaaSRoutes } from "./saas-routes";
 import { registerPatientImportRoutes } from "./patient-import-routes";
-import { tenantMiddleware, authMiddleware, requireRole, requireNonPatientRole, gdprComplianceMiddleware, requireModulePermission, type TenantRequest } from "./middleware/tenant";
+import { tenantMiddleware, authMiddleware, requireRole, requireNonPatientRole, gdprComplianceMiddleware, requireModulePermission, resolveOrganizationId, type TenantRequest } from "./middleware/tenant";
 import { multiTenantEnforcer, validateOrganizationFilter, withTenantIsolation } from "./middleware/multi-tenant-enforcer";
 import { initializeMultiTenantPackage, getMultiTenantPackage } from "./packages/multi-tenant-core";
 import { messagingService } from "./messaging-service";
@@ -11538,12 +11538,23 @@ ${clinicName}`;
     }
   });
 
-  app.get("/api/roles", authMiddleware, async (req: TenantRequest, res) => {
+  app.get("/api/roles", tenantMiddleware, authMiddleware, async (req: TenantRequest, res) => {
     try {
-      const roles = await storage.getRolesByOrganization(req.tenant!.id);
+      const organizationId = resolveOrganizationId(req);
+      let roles = await storage.getRolesByOrganization(organizationId);
+      if (roles.length === 0) {
+        const { ensureSystemRolesForOrganization } = await import(
+          "./default-system-roles.js"
+        );
+        await ensureSystemRolesForOrganization(organizationId);
+        roles = await storage.getRolesByOrganization(organizationId);
+      }
       res.json(roles);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Roles fetch error:", error);
+      if (error?.message === "Organization context required") {
+        return res.status(400).json({ error: error.message });
+      }
       res.status(500).json({ error: "Failed to fetch roles" });
     }
   });
@@ -12479,16 +12490,7 @@ ${clinicName}`;
     }
   });
 
-  // Role management routes
-  app.get("/api/roles", authMiddleware, async (req: TenantRequest, res) => {
-    try {
-      const roles = await storage.getRolesByOrganization(req.tenant!.id);
-      res.json(roles);
-    } catch (error) {
-      console.error("Roles fetch error:", error);
-      res.status(500).json({ error: "Failed to fetch roles" });
-    }
-  });
+  // Role management routes (GET /api/roles is registered earlier with tenantMiddleware)
 
   // Get role permissions by role name
   app.get("/api/roles/by-name/:roleName", tenantMiddleware, authMiddleware, async (req: TenantRequest, res) => {
@@ -12513,8 +12515,9 @@ ${clinicName}`;
     }
   });
 
-  app.post("/api/roles", requireRole(["admin"]), async (req: TenantRequest, res) => {
+  app.post("/api/roles", tenantMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
     try {
+      const organizationId = resolveOrganizationId(req);
       const permissionsPayload = preparePermissionsForValidation(req.body?.permissions);
       const validatedPermissions = rolePermissionsUpdate.parse(permissionsPayload);
 
@@ -12531,7 +12534,7 @@ ${clinicName}`;
 
       const role = await storage.createRole({
         ...roleData,
-        organizationId: req.tenant!.id
+        organizationId,
       });
 
       res.status(201).json(role);
@@ -12640,8 +12643,9 @@ ${clinicName}`;
     description: z.string().optional(),
   });
 
-  app.patch("/api/roles/:id", authMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
+  app.patch("/api/roles/:id", tenantMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
     try {
+      const organizationId = resolveOrganizationId(req);
       const roleId = Number(req.params.id);
 
       console.log("Incoming permissions payload:", JSON.stringify(req.body?.permissions));
@@ -12662,7 +12666,7 @@ ${clinicName}`;
 
       console.log("Normalized permissions payload:", validatedPermissions);
 
-      const role = await storage.updateRole(roleId, req.tenant!.id, updateData);
+      const role = await storage.updateRole(roleId, organizationId, updateData);
 
       if (!role) {
         return res.status(404).json({ error: "Role not found" });
@@ -12683,12 +12687,13 @@ ${clinicName}`;
     }
   });
 
-  app.delete("/api/roles/:id", requireRole(["admin"]), async (req: TenantRequest, res) => {
+  app.delete("/api/roles/:id", tenantMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
     try {
+      const organizationId = resolveOrganizationId(req);
       const roleId = parseInt(req.params.id);
 
       // Check if this is a system role
-      const role = await storage.getRole(roleId, req.tenant!.id);
+      const role = await storage.getRole(roleId, organizationId);
       if (!role) {
         return res.status(404).json({ error: "Role not found" });
       }
@@ -12697,7 +12702,7 @@ ${clinicName}`;
         return res.status(400).json({ error: "Cannot delete system roles" });
       }
 
-      const success = await storage.deleteRole(roleId, req.tenant!.id);
+      const success = await storage.deleteRole(roleId, organizationId);
 
       if (!success) {
         return res.status(404).json({ error: "Role not found" });

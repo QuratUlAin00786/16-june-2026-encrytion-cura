@@ -296,6 +296,14 @@ export async function tenantMiddleware(req: TenantRequest, res: Response, next: 
   }
 }
 
+export function resolveOrganizationId(req: TenantRequest): number {
+  const orgId = req.tenant?.id ?? req.user?.organizationId;
+  if (orgId == null || Number.isNaN(Number(orgId))) {
+    throw new Error("Organization context required");
+  }
+  return Number(orgId);
+}
+
 export async function authMiddleware(req: TenantRequest, res: Response, next: NextFunction) {
   try {
     if (req.path.startsWith("/forms/share/")) {

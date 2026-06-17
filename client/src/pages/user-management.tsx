@@ -1413,14 +1413,9 @@ export default function UserManagement() {
   const { data: rolesData = [] } = useQuery({
     queryKey: ["/api/roles"],
     queryFn: async () => {
-      try {
-        const response = await apiRequest("GET", "/api/roles");
-        const data = await response.json();
-        return Array.isArray(data) ? data : [];
-      } catch (error) {
-        console.error("Roles fetch error:", error);
-        return [];
-      }
+      const response = await apiRequest("GET", "/api/roles");
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
   });
 
@@ -2400,10 +2395,12 @@ export default function UserManagement() {
     queryKey: ["/api/roles"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/roles");
-      return response.json();
+      const data = await response.json();
+      return Array.isArray(data) ? data : [];
     },
+    enabled: activeTab === "roles",
     retry: false,
-    staleTime: 30000, // Keep data fresh for 30 seconds to prevent auto-refetch
+    staleTime: 30000,
   });
 
   // Fetch patients (admin only) so patient users can show family profiles + relation badges
@@ -7241,6 +7238,10 @@ export default function UserManagement() {
               <CardContent>
                 {rolesLoading ? (
                   <div className="text-center py-8">Loading roles...</div>
+                ) : rolesError ? (
+                  <div className="text-center py-8 text-red-600">
+                    Failed to load roles. Please refresh the page or try again.
+                  </div>
                 ) : roles.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     No roles found. Create your first custom role to get started.
