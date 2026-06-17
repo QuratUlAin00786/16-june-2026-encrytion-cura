@@ -2066,6 +2066,78 @@ ${organizationName}`;
   }
 }
 
+export type SmtpTestResult = {
+  success: boolean;
+  message?: string;
+  host?: string;
+  port?: number;
+  user?: string;
+  from?: string;
+  secure?: boolean;
+  error?: string;
+  verifyError?: string;
+};
+
+/** Verify SMTP connection using SMTP_* from .env (no email sent). */
+export async function testEnvSmtpConnection(): Promise<SmtpTestResult> {
+  const smtpHost = process.env.SMTP_HOST?.trim();
+  const smtpPort = Number(process.env.SMTP_PORT ?? 587);
+  const smtpUser = process.env.SMTP_USER?.trim();
+  const smtpPass = process.env.SMTP_PASSWORD?.trim();
+  const from = resolveEmailFromAddress();
+
+  const base: SmtpTestResult = {
+    success: false,
+    host: smtpHost,
+    port: smtpPort,
+    user: smtpUser,
+    from,
+    secure: smtpPort === 465 || process.env.SMTP_SECURE === "true",
+  };
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    return {
+      ...base,
+      error:
+        "SMTP not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in .env",
+    };
+  }
+
+  const rejectUnauthorized =
+    process.env.SMTP_REJECT_UNAUTHORIZED === "false"
+      ? false
+      : process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: base.secure,
+    auth: { user: smtpUser, pass: smtpPass },
+    tls: { rejectUnauthorized },
+    connectionTimeout: 20_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
+  });
+
+  try {
+    await transporter.verify();
+    return {
+      ...base,
+      success: true,
+      message: `Connected to ${smtpHost}:${smtpPort} as ${smtpUser}`,
+    };
+  } catch (error: unknown) {
+    const verifyError =
+      error instanceof Error ? error.message : String(error);
+    return {
+      ...base,
+      error: verifyError,
+      verifyError,
+      message: `Could not connect to ${smtpHost}:${smtpPort}`,
+    };
+  }
+}
+
 /** Send mail using SMTP_HOST / SMTP_USER / SMTP_PASSWORD from .env (fresh transport per send). */
 export async function sendEmailViaEnvSmtp(
   options: EmailOptions,

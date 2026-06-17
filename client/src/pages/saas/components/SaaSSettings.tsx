@@ -23,6 +23,18 @@ import {
 export default function SaaSSettings() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
+  const [showSmtpTestModal, setShowSmtpTestModal] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    host?: string;
+    port?: number;
+    user?: string;
+    from?: string;
+    secure?: boolean;
+    error?: string;
+    verifyError?: string;
+  } | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -91,6 +103,33 @@ export default function SaaSSettings() {
         description: "Failed to update settings",
         variant: "destructive",
       });
+    },
+  });
+
+  const testSmtpMutation = useMutation({
+    mutationFn: async () => {
+      const token = localStorage.getItem('saasToken');
+      const response = await fetch('/api/saas/settings/test-smtp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await response.json();
+      return { ...data, success: data.success ?? response.ok };
+    },
+    onSuccess: (data) => {
+      setSmtpTestResult(data);
+      setShowSmtpTestModal(true);
+    },
+    onError: (error: Error) => {
+      setSmtpTestResult({
+        success: false,
+        error: error.message || 'SMTP test request failed',
+        message: 'Could not reach the SMTP test endpoint',
+      });
+      setShowSmtpTestModal(true);
     },
   });
 
@@ -323,7 +362,21 @@ export default function SaaSSettings() {
             </div>
           </div>
 
-          <div className="pt-2">
+          <p className="text-xs text-muted-foreground">
+            Welcome emails use <strong>SMTP_*</strong> from the server <code>.env</code> file
+            (e.g. smtp.curaemr.ai), not the fields below unless saved separately.
+          </p>
+
+          <div className="pt-2 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => testSmtpMutation.mutate()}
+              disabled={testSmtpMutation.isPending}
+            >
+              <Key className="h-4 w-4 mr-2" />
+              {testSmtpMutation.isPending ? 'Testing SMTP…' : 'Test SMTP'}
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -473,6 +526,55 @@ export default function SaaSSettings() {
           {updateSettingsMutation.isPending ? 'Saving...' : 'Save Settings'}
         </Button>
       </div>
+
+      {/* SMTP test result modal */}
+      <Dialog open={showSmtpTestModal} onOpenChange={setShowSmtpTestModal}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle
+              className={
+                smtpTestResult?.success ? 'text-green-600' : 'text-red-600'
+              }
+            >
+              {smtpTestResult?.success ? 'SMTP connection OK' : 'SMTP connection failed'}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3 text-sm">
+            {smtpTestResult?.host && (
+              <div className="rounded-md border bg-muted/40 p-3 space-y-1 font-mono text-xs">
+                <p><span className="font-semibold font-sans">Host:</span> {smtpTestResult.host}</p>
+                <p><span className="font-semibold font-sans">Port:</span> {smtpTestResult.port}</p>
+                <p><span className="font-semibold font-sans">User:</span> {smtpTestResult.user}</p>
+                <p><span className="font-semibold font-sans">From:</span> {smtpTestResult.from}</p>
+                <p><span className="font-semibold font-sans">SSL:</span> {smtpTestResult.secure ? 'yes' : 'no'}</p>
+              </div>
+            )}
+
+            {smtpTestResult?.success ? (
+              <p className="text-gray-700">{smtpTestResult.message}</p>
+            ) : (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-red-800">
+                <p className="font-medium mb-1">Error from mail server</p>
+                <p className="font-mono text-xs break-all whitespace-pre-wrap">
+                  {smtpTestResult?.verifyError || smtpTestResult?.error || 'Unknown error'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                setShowSmtpTestModal(false);
+                setSmtpTestResult(null);
+              }}
+            >
+              OK
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Success Modal */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>

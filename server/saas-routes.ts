@@ -7,7 +7,7 @@ import { db } from "./db";
 import nodemailer from "nodemailer";
 import { saasOwners, organizations, users, saasPayments, saasInvoices, saasSubscriptions, saasPackages } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { emailService, sendEmailViaEnvSmtp } from "./services/email";
+import { emailService, sendEmailViaEnvSmtp, testEnvSmtpConnection } from "./services/email";
 import { sendReminderForSubscription } from "./services/subscription-reminders";
 import {
   getOrCreateStripeCustomer,
@@ -2604,6 +2604,30 @@ The Cura EMR Team`,
       } catch (error) {
         console.error("Error testing email:", error);
         res.status(500).json({ message: "Failed to test email" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/saas/settings/test-smtp",
+    verifySaaSToken,
+    async (_req: Request, res: Response) => {
+      try {
+        console.log("📧 SaaS SMTP connection test requested");
+        const result = await testEnvSmtpConnection();
+        if (result.success) {
+          return res.json(result);
+        }
+        return res.status(400).json(result);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : "SMTP test failed";
+        console.error("Error testing SMTP:", error);
+        res.status(500).json({
+          success: false,
+          error: message,
+          message: "SMTP test failed unexpectedly",
+        });
       }
     },
   );
