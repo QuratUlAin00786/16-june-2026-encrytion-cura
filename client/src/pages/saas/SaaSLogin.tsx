@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { useMutation } from '@tanstack/react-query';
 import { saasApiRequest } from '@/lib/saasQueryClient';
 import { useToast } from '@/hooks/use-toast';
-import { Shield, Lock, Eye, EyeOff } from 'lucide-react';
+import { Shield, Lock, Eye, EyeOff, ShieldCheck, LockKeyhole } from 'lucide-react';
 
 const curaLogoPath = "/cura-logo-chatbot.png";
 
@@ -68,8 +68,20 @@ export default function SaaSLogin({ onLoginSuccess }: SaaSLoginProps) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
-      <Card className="w-full max-w-md shadow-2xl">
+    <div className="relative min-h-screen overflow-hidden flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+      {/* Encryption-themed background icons */}
+      <div
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        aria-hidden="true"
+      >
+        <ShieldCheck className="absolute -left-8 top-[8%] h-44 w-44 text-blue-200/50 dark:text-blue-900/40 rotate-[-12deg]" />
+        <LockKeyhole className="absolute right-[6%] top-[12%] h-36 w-36 text-blue-300/40 dark:text-blue-800/35 rotate-[18deg]" />
+        <Lock className="absolute left-[10%] bottom-[14%] h-52 w-52 text-blue-200/45 dark:text-blue-900/30 rotate-[8deg]" />
+        <ShieldCheck className="absolute right-[-4%] bottom-[10%] h-56 w-56 text-blue-300/35 dark:text-blue-800/30 rotate-[24deg]" />
+        <LockKeyhole className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 text-blue-100/30 dark:text-blue-950/25" />
+      </div>
+
+      <Card className="relative z-10 w-full max-w-md shadow-2xl">
         <CardHeader className="space-y-4 text-center">
           <div className="flex justify-center">
             <img 
