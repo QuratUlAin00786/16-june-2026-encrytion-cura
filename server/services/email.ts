@@ -2066,4 +2066,68 @@ ${organizationName}`;
   }
 }
 
+/** Send mail using SMTP_HOST / SMTP_USER / SMTP_PASSWORD from .env (fresh transport per send). */
+export async function sendEmailViaEnvSmtp(
+  options: EmailOptions,
+): Promise<SendEmailReport> {
+  const smtpHost = process.env.SMTP_HOST?.trim();
+  const smtpPort = Number(process.env.SMTP_PORT ?? 587);
+  const smtpUser = process.env.SMTP_USER?.trim();
+  const smtpPass = process.env.SMTP_PASSWORD?.trim();
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    return {
+      success: false,
+      error:
+        "SMTP not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in .env",
+    };
+  }
+
+  const secure =
+    smtpPort === 465 || process.env.SMTP_SECURE === "true";
+
+  const rejectUnauthorized =
+    process.env.SMTP_REJECT_UNAUTHORIZED === "false"
+      ? false
+      : process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure,
+    auth: { user: smtpUser, pass: smtpPass },
+    tls: { rejectUnauthorized },
+    connectionTimeout: 20_000,
+    greetingTimeout: 15_000,
+    socketTimeout: 20_000,
+  });
+
+  const from = resolveEmailFromAddress(options.from);
+
+  try {
+    const result = await transporter.sendMail({
+      from,
+      to: options.to,
+      subject: options.subject,
+      text: options.text,
+      html: options.html,
+      attachments: options.attachments,
+    });
+    console.log(
+      "[EMAIL] ✅ Sent via env SMTP:",
+      result.messageId,
+      "to",
+      options.to,
+      "from",
+      from,
+    );
+    return { success: true };
+  } catch (error: unknown) {
+    const message =
+      error instanceof Error ? error.message : "SMTP send failed";
+    console.error("[EMAIL] ❌ Env SMTP failed:", message);
+    return { success: false, error: message };
+  }
+}
+
 export const emailService = new EmailService();

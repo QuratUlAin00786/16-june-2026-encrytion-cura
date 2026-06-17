@@ -482,12 +482,21 @@ export default function SaaSCustomers() {
       );
       setCreatedAdminCredentials(credentials);
 
-      const message = data.emailSent === false
-        ? 'Organization created successfully, but the welcome email could not be sent. Share the credentials below with the admin.'
-        : credentials
-          ? 'Organization created successfully! Login credentials were emailed to the admin and are shown below.'
-          : 'Organization created successfully!';
+      const adminEmail =
+        credentials?.email || data.adminUser?.email || "the admin";
+
+      const message = data.emailSent
+        ? `Organization created successfully and welcome email sent to ${adminEmail}.`
+        : data.emailSent === false
+          ? `Organization created successfully, but the welcome email could not be sent to ${adminEmail}. Share the credentials below with the admin.`
+          : "Organization created successfully!";
       setSuccessMessage(message);
+
+      toast({
+        title: data.emailSent ? "Organization created" : "Organization created (email failed)",
+        description: message,
+        variant: data.emailSent === false ? "destructive" : "default",
+      });
       setPermissionsOverview(DEFAULT_ROLE_PERMISSIONS);
       setShowPermissionsModal(true);
     },

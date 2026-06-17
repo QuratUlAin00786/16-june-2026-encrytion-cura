@@ -7,7 +7,7 @@ import { db } from "./db";
 import nodemailer from "nodemailer";
 import { saasOwners, organizations, users, saasPayments, saasInvoices, saasSubscriptions, saasPackages } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { emailService } from "./services/email";
+import { emailService, sendEmailViaEnvSmtp } from "./services/email";
 import { sendReminderForSubscription } from "./services/subscription-reminders";
 import {
   getOrCreateStripeCustomer,
@@ -176,53 +176,39 @@ Cura Software Limited
     };
 
     console.log(
-      "📧 About to send professional welcome email via centralized service:",
+      "📧 Sending welcome email via SMTP (.env):",
       {
         to: emailOptions.to,
         subject: emailOptions.subject,
-        hasHtml: !!emailOptions.html,
+        smtpHost: process.env.SMTP_HOST,
+        smtpUser: process.env.SMTP_USER,
+        hasTempPassword: !!adminUser?.tempPassword,
       },
     );
 
-    // Retry mechanism for reliability
-    let emailResult = false;
-    let attempt = 0;
-    const maxAttempts = 3;
-
-    while (!emailResult && attempt < maxAttempts) {
-      attempt++;
-      console.log(`📧 Email delivery attempt ${attempt}/${maxAttempts}`);
-
-      try {
-        emailResult = await emailService.sendEmail(emailOptions);
-        if (emailResult) {
-          console.log(`📧 ✅ Email sent successfully on attempt ${attempt}!`);
-          break;
-        } else {
-          console.log(`📧 ⚠️ Email attempt ${attempt} failed, retrying...`);
-          if (attempt < maxAttempts) {
-            await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
-          }
-        }
-      } catch (attemptError) {
-        console.error(`📧 ❌ Email attempt ${attempt} error:`, attemptError);
-        if (attempt < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds before retry
-        }
-      }
+    const smtpReport = await sendEmailViaEnvSmtp(emailOptions);
+    if (smtpReport.success) {
+      console.log(`📧 ✅ Welcome email sent to ${adminUser.email}`);
+      return true;
     }
 
-    console.log(
-      `📧 Welcome email to ${adminUser.email} for organization ${organization.name} - Final result: ${emailResult}`,
+    console.warn(
+      "📧 Env SMTP failed, trying email service fallback:",
+      smtpReport.error,
+    );
+    const fallback = await emailService.sendEmailWithReport(emailOptions);
+    if (fallback.success) {
+      console.log(`📧 ✅ Welcome email sent via fallback to ${adminUser.email}`);
+      return true;
+    }
+
+    const errorDetail = fallback.error || smtpReport.error || "Unknown error";
+    console.error(
+      `📧 Welcome email to ${adminUser.email} failed:`,
+      errorDetail,
     );
 
-    if (!emailResult) {
-      throw new Error(
-        `Failed to send welcome email after ${maxAttempts} attempts`,
-      );
-    }
-
-    return true;
+    throw new Error(`Failed to send welcome email: ${errorDetail}`);
   } catch (error) {
     console.error("📧 ❌ Error sending welcome email:", error);
     // Log the email content for debugging
@@ -235,7 +221,7 @@ Cura Software Limited
   }
 }
 
-const WELCOME_EMAIL_TIMEOUT_MS = 25_000;
+const WELCOME_EMAIL_TIMEOUT_MS = 45_000;
 
 async function sendWelcomeEmailWithTimeout(
   organization: any,
@@ -1673,12 +1659,16 @@ The Cura EMR Team`,
         const result = await storage.createCustomerOrganization(customerData);
 
         let emailSent = false;
+        let emailError: string | undefined;
         if (result.success && result.adminUser) {
-          const delivery = await sendWelcomeEmailWithTimeout(
+          emailSent = await sendWelcomeEmailWithTimeout(
             result.organization,
             result.adminUser,
           );
-          emailSent = delivery;
+          if (!emailSent) {
+            emailError =
+              "Welcome email could not be delivered. Check SMTP settings in .env and server logs.";
+          }
         }
 
         const adminCredentials =
@@ -1694,6 +1684,7 @@ The Cura EMR Team`,
         return res.json({
           ...result,
           emailSent,
+          emailError,
           adminCredentials,
         });
       } catch (error: any) {
