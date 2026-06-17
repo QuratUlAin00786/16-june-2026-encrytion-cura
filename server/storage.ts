@@ -17,7 +17,7 @@ import {
   wallClockDateStringFromScheduled,
 } from "./appointment-wall-clock.js";
 import { 
-  organizations, users, patients, medicalRecords, medicalRecordsFiles, appointments, invoices, payments, aiInsights, subscriptions, patientCommunications, consultations, notifications, prescriptions, documents, medicalImages, clinicalPhotos, labResults, riskAssessments, claims, revenueRecords, insuranceVerifications, clinicalProcedures, emergencyProtocols, medicationsDatabase, roles, staffShifts, doctorDefaultShifts, organizationHolidaySettings, organizationHolidays, gdprConsents, gdprDataRequests, gdprAuditTrail, gdprProcessingActivities, conversations as conversationsTable, messages, messageCampaigns, messageTemplates, userConversationFavorites, messageTags, messageTagAssignments, voiceNotes, saasOwners, saasPackages, saasSubscriptions, saasPayments, saasInvoices, saasSettings, chatbotConfigs, chatbotSessions, chatbotMessages, chatbotAnalytics, musclePositions, userDocumentPreferences, letterDrafts, forecastModels, financialForecasts, quickbooksConnections, quickbooksSyncLogs, quickbooksCustomerMappings, quickbooksInvoiceMappings, quickbooksPaymentMappings, quickbooksAccountMappings, quickbooksItemMappings, quickbooksSyncConfigs, doctorsFee, labTestPricing, imagingPricing, treatments, treatmentsInfo, clinicHeaders, clinicFooters, symptomChecks, passwordResetTokens, forms, formSections, formFields, formShares, formShareLogs, formResponses, formResponseValues, prescriptionShareLogs,
+  organizations, users, patients, medicalRecords, medicalRecordsFiles, appointments, invoices, payments, aiInsights, subscriptions, patientCommunications, consultations, notifications, prescriptions, documents, medicalImages, clinicalPhotos, labResults, riskAssessments, claims, revenueRecords, insuranceVerifications, clinicalProcedures, emergencyProtocols, medicationsDatabase, roles, staffShifts, doctorDefaultShifts, organizationHolidaySettings, organizationHolidays, gdprConsents, gdprDataRequests, gdprAuditTrail, gdprProcessingActivities, conversations as conversationsTable, messages, messageCampaigns, messageTemplates, userConversationFavorites, messageTags, messageTagAssignments, voiceNotes, saasOwners, saasPackages, saasSubscriptions, saasPayments, saasInvoices, saasSubscriptionHistory, saasSettings, chatbotConfigs, chatbotSessions, chatbotMessages, chatbotAnalytics, musclePositions, userDocumentPreferences, letterDrafts, forecastModels, financialForecasts, quickbooksConnections, quickbooksSyncLogs, quickbooksCustomerMappings, quickbooksInvoiceMappings, quickbooksPaymentMappings, quickbooksAccountMappings, quickbooksItemMappings, quickbooksSyncConfigs, doctorsFee, labTestPricing, imagingPricing, treatments, treatmentsInfo, clinicHeaders, clinicFooters, symptomChecks, passwordResetTokens, forms, formSections, formFields, formShares, formShareLogs, formResponses, formResponseValues, prescriptionShareLogs,
   type Organization, type InsertOrganization,
   type User, type InsertUser,
   type Role, type InsertRole,
@@ -879,6 +879,11 @@ export class DatabaseStorage implements IStorage {
       { key: "staffShifts", table: staffShifts },
       { key: "doctorDefaultShifts", table: doctorDefaultShifts },
       { key: "symptomChecks", table: symptomChecks },
+      { key: "saasSubscriptionHistory", table: saasSubscriptionHistory },
+      { key: "saasPayments", table: saasPayments },
+      { key: "saasInvoices", table: saasInvoices },
+      { key: "saasSubscriptions", table: saasSubscriptions },
+      { key: "organizationHolidays", table: organizationHolidays },
     ];
 
     const counts: Record<string, number> = {};
@@ -929,7 +934,6 @@ export class DatabaseStorage implements IStorage {
       { key: "roles", table: roles },
       { key: "patients", table: patients },
       { key: "users", table: users },
-      { key: "saasSubscriptions", table: saasSubscriptions },
     ];
 
     const deletedCounts: Record<string, number> = {};
@@ -1017,6 +1021,50 @@ export class DatabaseStorage implements IStorage {
         });
         // Re-throw to prevent cascade deletion that would violate foreign key
         throw new Error(`Failed to delete trial tokens: ${trialTokenError?.message || trialTokenError}`);
+      }
+
+      // SaaS audit/history references users.id (performed_by) — must run before users are deleted
+      await deleteWithCondition(
+        saasSubscriptionHistory,
+        eq(saasSubscriptionHistory.organizationId, id),
+        "saasSubscriptionHistory",
+      );
+      if (hasUserIds) {
+        await tx.execute(sql`
+          UPDATE saas_subscription_history
+          SET performed_by = NULL
+          WHERE performed_by IN (SELECT id FROM users WHERE organization_id = ${id})
+        `);
+      }
+
+      await deleteWithCondition(saasPayments, eq(saasPayments.organizationId, id), "saasPayments");
+      await deleteWithCondition(saasInvoices, eq(saasInvoices.organizationId, id), "saasInvoices");
+      await deleteWithCondition(
+        saasSubscriptions,
+        eq(saasSubscriptions.organizationId, id),
+        "saasSubscriptions",
+      );
+
+      await tx.execute(sql`
+        DELETE FROM password_reset_tokens
+        WHERE user_id IN (SELECT id FROM users WHERE organization_id = ${id})
+      `);
+
+      await deleteWithCondition(
+        organizationHolidays,
+        eq(organizationHolidays.organizationId, id),
+        "organizationHolidays",
+      );
+
+      const [holidaySettingsCount] = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(organizationHolidaySettings)
+        .where(eq(organizationHolidaySettings.organizationId, id));
+      deletedCounts.organizationHolidaySettings = holidaySettingsCount?.count || 0;
+      if (deletedCounts.organizationHolidaySettings > 0) {
+        await tx
+          .delete(organizationHolidaySettings)
+          .where(eq(organizationHolidaySettings.organizationId, id));
       }
 
       for (const entry of tables) {
