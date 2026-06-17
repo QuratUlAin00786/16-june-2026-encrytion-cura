@@ -235,6 +235,53 @@ Cura Software Limited
   }
 }
 
+const WELCOME_EMAIL_TIMEOUT_MS = 25_000;
+
+async function sendWelcomeEmailWithTimeout(
+  organization: any,
+  adminUser: any,
+  timeoutMs = WELCOME_EMAIL_TIMEOUT_MS,
+): Promise<boolean> {
+  try {
+    await Promise.race([
+      sendWelcomeEmail(organization, adminUser),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Welcome email send timed out")),
+          timeoutMs,
+        ),
+      ),
+    ]);
+    return true;
+  } catch (error) {
+    console.error("📧 ❌ Welcome email delivery failed:", error);
+    return false;
+  }
+}
+
+async function sendWelcomeEmailToOrgAdmin(
+  organization: any,
+  adminUser: any,
+  options?: { resetPassword?: boolean },
+): Promise<{ emailSent: boolean; tempPassword?: string }> {
+  let emailUser = adminUser;
+  let tempPassword = adminUser?.tempPassword as string | undefined;
+
+  if (!tempPassword && options?.resetPassword !== false) {
+    const reset = await storage.resetUserPassword(adminUser.id);
+    tempPassword = reset.tempPassword;
+    emailUser = { ...adminUser, tempPassword };
+  }
+
+  if (!tempPassword) {
+    console.error("📧 ❌ Cannot send welcome email: no temporary password available");
+    return { emailSent: false };
+  }
+
+  const emailSent = await sendWelcomeEmailWithTimeout(organization, emailUser);
+  return { emailSent, tempPassword };
+}
+
 // Middleware to verify SaaS owner token
 interface SaaSRequest extends Request {
   saasOwner?: any;
@@ -435,8 +482,18 @@ export function registerSaaSRoutes(app: Express) {
           adminName: `${adminUser.firstName} ${adminUser.lastName}`,
         });
 
-        // Send the welcome email
-        await sendWelcomeEmail(organization, adminUser);
+        const { emailSent, tempPassword } = await sendWelcomeEmailToOrgAdmin(
+          organization,
+          adminUser,
+        );
+
+        if (!emailSent) {
+          return res.status(500).json({
+            success: false,
+            message: "Failed to send welcome email",
+            tempPassword,
+          });
+        }
 
         res.json({
           success: true,
@@ -991,9 +1048,18 @@ The Cura EMR Team`,
           lastName: adminUser.lastName,
         });
 
-        // Send the welcome email
-        console.log("📧 About to send welcome email...");
-        await sendWelcomeEmail(lastOrganization, adminUser);
+        const { emailSent } = await sendWelcomeEmailToOrgAdmin(
+          lastOrganization,
+          adminUser,
+        );
+
+        if (!emailSent) {
+          return res.status(500).json({
+            success: false,
+            message: "Failed to send welcome email",
+          });
+        }
+
         console.log("📧 ✅ Welcome email sent successfully!");
 
         res.json({
@@ -1606,22 +1672,30 @@ The Cura EMR Team`,
 
         const result = await storage.createCustomerOrganization(customerData);
 
-        // Send welcome email in the background so nginx/proxy timeouts are not hit
+        let emailSent = false;
         if (result.success && result.adminUser) {
-          const { organization, adminUser } = result;
-          void sendWelcomeEmail(organization, adminUser)
-            .then(() => {
-              console.log(
-                "📧 ✅ Welcome email sent successfully to:",
-                adminUser.email,
-              );
-            })
-            .catch((emailError: any) => {
-              console.error("📧 ❌ Failed to send welcome email:", emailError);
-            });
+          const delivery = await sendWelcomeEmailWithTimeout(
+            result.organization,
+            result.adminUser,
+          );
+          emailSent = delivery;
         }
 
-        return res.json({ ...result, emailQueued: true });
+        const adminCredentials =
+          result.adminUser?.tempPassword
+            ? {
+                email: result.adminUser.email,
+                tempPassword: result.adminUser.tempPassword,
+                firstName: result.adminUser.firstName,
+                lastName: result.adminUser.lastName,
+              }
+            : undefined;
+
+        return res.json({
+          ...result,
+          emailSent,
+          adminCredentials,
+        });
       } catch (error: any) {
         console.error("❌ Error creating customer:", {
           message: error.message,

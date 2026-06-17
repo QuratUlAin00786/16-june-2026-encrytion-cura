@@ -7412,14 +7412,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async resetUserPassword(userId: number): Promise<any> {
-    // Generate a temporary password and send email
     const crypto = await import('crypto');
     const tempPassword = crypto.randomBytes(4).toString('hex');
     const bcryptModule = await import('bcrypt');
     const hashedPassword = await bcryptModule.hash(tempPassword, 10);
     
     await db.update(users)
-      .set({ password: hashedPassword })
+      .set({ passwordHash: hashedPassword })
       .where(eq(users.id, userId));
 
     return { success: true, tempPassword };
@@ -7456,7 +7455,7 @@ export class DatabaseStorage implements IStorage {
     const hashedPassword = await bcryptModule.hash(tempPassword, 10);
     
     await db.update(users)
-      .set({ password: hashedPassword })
+      .set({ passwordHash: hashedPassword })
       .where(eq(users.id, contactId));
 
     return { success: true, tempPassword, contact };

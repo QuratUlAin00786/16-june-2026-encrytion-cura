@@ -129,6 +129,12 @@ export default function SaaSCustomers() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [createdAdminCredentials, setCreatedAdminCredentials] = useState<{
+    email: string;
+    tempPassword: string;
+    firstName?: string;
+    lastName?: string;
+  } | null>(null);
   const [isErrorModalOpen, setIsErrorModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
@@ -222,6 +228,28 @@ export default function SaaSCustomers() {
   const handlePermissionsConfirmed = () => {
     setShowPermissionsModal(false);
     setIsSuccessModalOpen(true);
+  };
+
+  const renderAdminCredentials = () => {
+    if (!createdAdminCredentials) return null;
+    return (
+      <div className="w-full rounded-lg border border-blue-200 bg-blue-50 p-4 text-left text-sm">
+        <p className="font-semibold text-blue-900 mb-2">Admin login credentials</p>
+        <p className="text-gray-700">
+          <span className="font-medium">Email:</span>{' '}
+          {createdAdminCredentials.email}
+        </p>
+        <p className="text-gray-700 mt-1">
+          <span className="font-medium">Temporary password:</span>{' '}
+          <code className="rounded bg-white px-2 py-0.5 font-mono text-blue-900">
+            {createdAdminCredentials.tempPassword}
+          </code>
+        </p>
+        <p className="text-xs text-gray-500 mt-2">
+          Share these with the organization admin. The password is stored securely as a hash in the database.
+        </p>
+      </div>
+    );
   };
   const isPopupOpen =
     isAddDialogOpen ||
@@ -442,10 +470,22 @@ export default function SaaSCustomers() {
         }
       });
       // Show success modal with appropriate message
+      const credentials = data.adminCredentials || (
+        data.adminUser?.tempPassword
+          ? {
+              email: data.adminUser.email,
+              tempPassword: data.adminUser.tempPassword,
+              firstName: data.adminUser.firstName,
+              lastName: data.adminUser.lastName,
+            }
+          : null
+      );
+      setCreatedAdminCredentials(credentials);
+
       const message = data.emailSent === false
-        ? 'Organization created successfully but email sending failed.'
-        : data.emailQueued
-          ? 'Organization created successfully! A welcome email is being sent to the admin.'
+        ? 'Organization created successfully, but the welcome email could not be sent. Share the credentials below with the admin.'
+        : credentials
+          ? 'Organization created successfully! Login credentials were emailed to the admin and are shown below.'
           : 'Organization created successfully!';
       setSuccessMessage(message);
       setPermissionsOverview(DEFAULT_ROLE_PERMISSIONS);
@@ -2746,11 +2786,15 @@ export default function SaaSCustomers() {
             <DialogHeader>
               <DialogTitle className="text-center text-xl">Organization Created Successfully</DialogTitle>
             </DialogHeader>
+            {renderAdminCredentials()}
             <p className="text-center text-gray-600">
               {successMessage}
             </p>
             <Button 
-              onClick={() => setIsSuccessModalOpen(false)}
+              onClick={() => {
+                setIsSuccessModalOpen(false);
+                setCreatedAdminCredentials(null);
+              }}
               className="bg-blue-600 hover:bg-blue-700 px-8"
             >
               OK
@@ -2769,6 +2813,7 @@ export default function SaaSCustomers() {
             <DialogTitle>Assigned Permissions</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            {renderAdminCredentials()}
             <p className="text-sm text-gray-600">
               Every new organization receives 15 default roles. All roles have view access to all 21 modules (Dashboard, Patients, Appointments, Prescriptions, Lab Results, Imaging, Forms, Messaging, Analytics, Clinical Decision Support, Symptom Checker, Telemedicine, Voice Documentation, Financial Intelligence, Billing, QuickBooks, Inventory, Shift Management, Settings, Subscription/Packages, User Manual). Edit, create, and delete permissions vary by role.
             </p>
