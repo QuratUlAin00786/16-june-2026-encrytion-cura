@@ -1,20 +1,43 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+function friendlyHttpError(status: number, body: string): string {
+  if (status === 504 || body.includes("504 Gateway Time-out") || body.includes("504 Gateway Timeout")) {
+    return "The server took too long to respond. The organization may still have been created — refresh the list and try again if it is missing.";
+  }
+  if (status === 502 || body.includes("502 Bad Gateway")) {
+    return "The server is temporarily unavailable. Please try again in a moment.";
+  }
+  if (status === 503 || body.includes("503 Service Unavailable")) {
+    return "The service is temporarily unavailable. Please try again shortly.";
+  }
+  if (body.trim().startsWith("<") || body.includes("<html")) {
+    const titleMatch = body.match(/<title>([^<]+)<\/title>/i);
+    if (titleMatch?.[1]) {
+      return titleMatch[1].trim();
+    }
+    return `Request failed (${status})`;
+  }
+  return body || resStatusText(status);
+}
+
+function resStatusText(status: number): string {
+  return `Request failed (${status})`;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    
-    // Try to parse JSON and extract message
+
     try {
       const errorData = JSON.parse(text);
       if (errorData.message) {
         throw new Error(errorData.message);
       }
-    } catch (parseError) {
-      // If JSON parsing fails, use the text as-is
+    } catch {
+      // Not JSON — use a friendly message for HTML/proxy errors
     }
-    
-    throw new Error(text);
+
+    throw new Error(friendlyHttpError(res.status, text));
   }
 }
 

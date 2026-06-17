@@ -7577,63 +7577,10 @@ export class DatabaseStorage implements IStorage {
         throw new Error(`Admin email '${customerData.adminEmail}' is already in use. Please use a different email address.`);
       }
 
-      // Create Stripe Express account first
-      let stripeAccountId: string | null = null;
-      let stripeStatus: string = 'active';
-      
-      try {
-        const Stripe = (await import('stripe')).default;
-        const stripe = process.env.STRIPE_SECRET_KEY
-          ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-              apiVersion: '2025-07-30.basil',
-            })
-          : null;
-        
-        if (stripe) {
-          console.log('💳 [CUSTOMER-CREATE] Creating Stripe Express account...');
-          
-          // Get platform's country from Stripe account to match connected account country
-          let platformCountry = process.env.STRIPE_ACCOUNT_COUNTRY || null;
-          if (!platformCountry) {
-            try {
-              const platformAccount = await stripe.accounts.retrieve();
-              platformCountry = platformAccount.country || 'GB'; // Default to GB if not found
-              console.log('🌍 [CUSTOMER-CREATE] Platform country detected:', platformCountry);
-            } catch (accountError: any) {
-              console.warn('⚠️ [CUSTOMER-CREATE] Could not retrieve platform account, defaulting to GB:', accountError.message);
-              platformCountry = 'GB'; // Default fallback
-            }
-          }
-          
-          console.log('🔧 [CUSTOMER-CREATE] Creating account with capabilities:', {
-            card_payments: { requested: true },
-            transfers: { requested: true },
-          });
-          
-          const stripeAccount = await stripe.accounts.create({
-            type: "express",
-            email: customerData.adminEmail,
-            country: platformCountry, // Use platform's country to avoid cross-border restrictions
-            capabilities: {
-              card_payments: { requested: true },
-              transfers: { requested: true },
-            },
-            metadata: {
-              organization_name: customerData.name,
-              subdomain: customerData.subdomain,
-            },
-          });
-          stripeAccountId = stripeAccount.id;
-          stripeStatus = 'active';
-          console.log('✅ [CUSTOMER-CREATE] Stripe Express account created:', stripeAccountId);
-        } else {
-          console.warn('⚠️ [CUSTOMER-CREATE] Stripe not configured, skipping account creation');
-        }
-      } catch (stripeError: any) {
-        console.error('❌ [CUSTOMER-CREATE] Failed to create Stripe account:', stripeError?.message || stripeError);
-        // Don't fail organization creation if Stripe account creation fails
-        stripeStatus = 'disconnected';
-      }
+      // Stripe Connect is created on demand via /api/saas/organizations/:id/connect-stripe
+      // to avoid gateway timeouts during organization creation.
+      const stripeAccountId: string | null = null;
+      const stripeStatus = 'disconnected';
 
       // Create organization - match database column names (snake_case)
       console.log('🏢 [CUSTOMER-CREATE] Creating organization with data:', {

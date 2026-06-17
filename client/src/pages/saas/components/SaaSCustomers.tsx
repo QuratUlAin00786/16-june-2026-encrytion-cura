@@ -444,7 +444,9 @@ export default function SaaSCustomers() {
       // Show success modal with appropriate message
       const message = data.emailSent === false
         ? 'Organization created successfully but email sending failed.'
-        : 'Organization created successfully!';
+        : data.emailQueued
+          ? 'Organization created successfully! A welcome email is being sent to the admin.'
+          : 'Organization created successfully!';
       setSuccessMessage(message);
       setPermissionsOverview(DEFAULT_ROLE_PERMISSIONS);
       setShowPermissionsModal(true);
