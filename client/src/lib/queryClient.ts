@@ -3,17 +3,37 @@ import { isPermissionError, showPermissionDenied } from "./permission-error-hand
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
+function normalizedPort(protocol: string, port: string): string {
+  if (port) return port;
+  return protocol === "https:" ? "443" : "80";
+}
+
+/** True when VITE_API_URL points at the same host:port as the page (use relative /api paths). */
+function isSameApiOrigin(): boolean {
+  if (!API_BASE_URL || typeof window === "undefined") return false;
+  try {
+    const api = new URL(API_BASE_URL);
+    const loc = window.location;
+    return (
+      api.hostname === loc.hostname &&
+      normalizedPort(api.protocol, api.port) ===
+        normalizedPort(loc.protocol, loc.port)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function buildUrl(path: string) {
   if (path.startsWith("http")) {
     return path;
   }
   if (API_BASE_URL) {
-    return `${API_BASE_URL.replace(/\/$/, "")}${path}`;
-  }
-  // In development, use relative paths since the server serves both frontend and backend
-  // This avoids connection refused errors when the port doesn't match
-  if (import.meta.env.DEV) {
-    return path;
+    // Relative paths use CSP connect-src 'self' and avoid http/https mismatches.
+    if (isSameApiOrigin()) {
+      return path;
+    }
+    return `${API_BASE_URL}${path}`;
   }
   return path;
 }
@@ -210,6 +230,39 @@ export async function apiRequest(
   }
 
   await throwIfResNotOk(res);
+  return res;
+}
+
+/** Multipart upload with the same auth + tenant headers as apiRequest (no JSON Content-Type). */
+export async function apiUpload(url: string, formData: FormData): Promise<Response> {
+  checkSessionTimeout();
+
+  const token = localStorage.getItem("auth_token");
+  const headers: Record<string, string> = {
+    "X-Tenant-Subdomain": getTenantSubdomain(),
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  } else {
+    console.warn("[API-UPLOAD] No auth token found for upload:", url);
+  }
+
+  const res = await fetch(buildUrl(url), {
+    method: "POST",
+    headers,
+    body: formData,
+    credentials: "include",
+  });
+
+  if (res.ok) {
+    localStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+  } else if (res.status === 401) {
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("user_subdomain");
+    localStorage.removeItem(LAST_ACTIVITY_KEY);
+    localStorage.removeItem("sessionStartTime");
+  }
+
   return res;
 }
 

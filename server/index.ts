@@ -34,10 +34,14 @@ function getLiveKitCspConnectExtras(): string {
       const u = new URL(normalized.startsWith("http") ? normalized : `https://${normalized}`);
       if (u.hostname) {
         parts.add(`https://${u.hostname}`);
+        parts.add(`http://${u.hostname}`);
         parts.add(`wss://${u.hostname}`);
+        parts.add(`ws://${u.hostname}`);
         if (u.port) {
           parts.add(`https://${u.hostname}:${u.port}`);
+          parts.add(`http://${u.hostname}:${u.port}`);
           parts.add(`wss://${u.hostname}:${u.port}`);
+          parts.add(`ws://${u.hostname}:${u.port}`);
         }
       }
     } catch {

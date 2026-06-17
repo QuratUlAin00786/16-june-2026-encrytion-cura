@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import bcrypt from "bcrypt";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, asc, eq, or, sql } from "drizzle-orm";
 import { db } from "../db";
+import { activeDbSchema } from "../db";
 import { storage } from "../storage";
 import {
   patientImportAudit,
@@ -9,12 +10,12 @@ import {
   patients,
   users,
 } from "@shared/schema";
-import { parseLegacyPatientSql } from "../utils/legacy-sql-parser";
+import { parseLegacyPatientSql, extractLegacyInsertStatements } from "../utils/legacy-sql-parser";
 import {
   computePatientSearchHashes,
   formatCnicForStorage,
-  isValidCnicFormat,
   isValidEmailFormat,
+  isValidNationalIdFormat,
   isValidPhoneFormat,
   normalizePhone,
 } from "../utils/patient-search-hashes";
@@ -34,6 +35,49 @@ export type ImportBatchSummary = {
   failedRecords: number;
   existingRecords: number;
   pendingRecords: number;
+  /** Patients inserted during the current import request only */
+  insertedThisRun?: number;
+  /** Duplicates skipped during the current import request only */
+  skippedDuplicatesThisRun?: number;
+  insertedPatients?: Array<{
+    stagingId: number;
+    patientDbId: number;
+    patientId: string;
+    fullName: string;
+    email: string;
+    phone?: string;
+  }>;
+  duplicateRows?: StagingRowRecord[];
+  databaseSchema?: string;
+  message?: string;
+};
+
+export type StagingRowRecord = {
+  id: number;
+  organizationId: number;
+  importBatchId: string;
+  fullName: string | null;
+  cnic: string | null;
+  phone: string | null;
+  email: string | null;
+  dateOfBirth: string | null;
+  gender: string | null;
+  address: string | null;
+  importStatus: string;
+  validationStatus: string;
+  errorMessage: string | null;
+  duplicateReason: string | null;
+  importedPatientId: number | null;
+};
+
+export type StagingRowUpdate = {
+  fullName?: string;
+  cnic?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  address?: string | null;
 };
 
 function splitFullName(fullName: string): { firstName: string; lastName: string } {
@@ -105,7 +149,110 @@ export async function findDuplicateByHashes(
   return { id: existing.id, reason: reasons.join(", ") };
 }
 
-function validateStagingRow(row: {
+/** Hash keys for duplicate detection — only real CNIC/NHS, not phone/email synthetic legacy ids. */
+export function hashInputFromStagingRow(row: {
+  cnic?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}): { cnic: string | null; phone: string | null; email: string | null } {
+  return {
+    cnic: row.cnic?.trim() || null,
+    phone: row.phone ?? null,
+    email: row.email ?? null,
+  };
+}
+
+function formatDuplicateDetail(
+  row: { cnic?: string | null; phone?: string | null; email?: string | null },
+  match: { id: number; reason: string },
+): string {
+  const fieldLabels = match.reason.split(", ").map((field) => {
+    if (field === "Phone" && row.phone?.trim()) return `phone ${row.phone.trim()}`;
+    if (field === "Email" && row.email?.trim()) return `email ${row.email.trim()}`;
+    if (field === "CNIC" && row.cnic?.trim()) return `CNIC/NHS ${row.cnic.trim()}`;
+    if (field.startsWith("Email (")) return `email ${row.email?.trim() || "(linked user)"}`;
+    return field.toLowerCase();
+  });
+  return `Matches existing patient #${match.id} (${fieldLabels.join(", ")}). Change that field or remove the existing patient first.`;
+}
+
+async function findExistingByPlaintextContact(
+  organizationId: number,
+  row: { email?: string | null; phone?: string | null },
+): Promise<{ id: number; reason: string } | null> {
+  const email = row.email?.trim();
+  if (email) {
+    const byEmail = await storage.getPatientByEmail(email, organizationId);
+    if (byEmail) {
+      return { id: byEmail.id, reason: "Email" };
+    }
+  }
+
+  const phone = row.phone?.trim();
+  if (!phone) return null;
+
+  const targetDigits = normalizePhone(phone).slice(-10);
+  if (targetDigits.length < 10) return null;
+
+  const orgRows = await db
+    .select()
+    .from(patients)
+    .where(eq(patients.organizationId, organizationId));
+
+  for (const raw of orgRows) {
+    if (raw.phoneHash) continue;
+    const patient = await storage.normalizePatientFromRow(raw);
+    if (!patient?.phone) continue;
+    const storedDigits = normalizePhone(patient.phone).slice(-10);
+    if (storedDigits === targetDigits) {
+      return { id: patient.id, reason: "Phone" };
+    }
+  }
+
+  return null;
+}
+
+/** Hash match first; fall back to plaintext email/phone for legacy rows without hashes. */
+export async function findExistingPatientForImport(
+  organizationId: number,
+  row: { email?: string | null; phone?: string | null; cnic?: string | null },
+): Promise<{ id: number; reason: string } | null> {
+  const hashes = computePatientSearchHashes(organizationId, hashInputFromStagingRow(row));
+  const byHash = await findDuplicateByHashes(organizationId, hashes);
+  if (byHash) return byHash;
+
+  const byContact = await findExistingByPlaintextContact(organizationId, row);
+  if (byContact) return byContact;
+
+  const email = row.email?.trim();
+  if (email) {
+    const user = await storage.getUserByEmail(email, organizationId);
+    if (user) {
+      const existingPatient = await storage.getPatientByUserId(user.id, organizationId);
+      if (existingPatient) {
+        return { id: existingPatient.id, reason: "Email (patient already linked to user)" };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function resolveStagingNationalId(row: {
+  cnic?: string | null;
+  phone?: string | null;
+  email?: string | null;
+}): string {
+  const cnic = row.cnic?.trim();
+  if (cnic) return cnic;
+  const phone = row.phone?.trim();
+  if (phone) return `LEGACY-PH-${normalizePhone(phone)}`;
+  const email = row.email?.trim();
+  if (email) return `LEGACY-EM-${email.toLowerCase()}`;
+  return "";
+}
+
+export function validateStagingRow(row: {
   fullName?: string | null;
   cnic?: string | null;
   phone?: string | null;
@@ -114,10 +261,20 @@ function validateStagingRow(row: {
   const errors: string[] = [];
 
   if (!row.fullName?.trim()) errors.push("Full Name is required");
-  if (!row.cnic?.trim()) errors.push("CNIC is required");
-  else if (!isValidCnicFormat(row.cnic)) errors.push("CNIC format must be xxxxx-xxxxxxx-x");
-  if (!row.phone?.trim()) errors.push("Phone is required");
-  else if (!isValidPhoneFormat(row.phone)) errors.push("Phone format must be 03xxxxxxxxx");
+
+  const nationalId = resolveStagingNationalId(row);
+  const hasNationalId = nationalId && isValidNationalIdFormat(nationalId);
+  const hasPhone = Boolean(row.phone?.trim() && isValidPhoneFormat(row.phone));
+
+  if (!hasNationalId && !hasPhone) {
+    errors.push("CNIC/NHS/Patient ID or a valid phone number is required");
+  } else if (row.cnic?.trim() && !isValidNationalIdFormat(row.cnic)) {
+    errors.push("CNIC/NHS/Patient ID format is invalid");
+  }
+
+  if (row.phone?.trim() && !isValidPhoneFormat(row.phone)) {
+    errors.push("Phone format is invalid");
+  }
   if (row.email?.trim() && !isValidEmailFormat(row.email)) {
     errors.push("Email format is invalid");
   }
@@ -125,20 +282,118 @@ function validateStagingRow(row: {
   return { valid: errors.length === 0, errors };
 }
 
+type StagingValidationOutcome = {
+  validationStatus: string;
+  importStatus: string;
+  errorMessage: string | null;
+  duplicateReason: string | null;
+  importedPatientId?: number | null;
+};
+
+async function applyStagingRowValidation(
+  organizationId: number,
+  row: {
+    id: number;
+    fullName?: string | null;
+    cnic?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    importStatus?: string | null;
+  },
+  seenHashes: Set<string>,
+): Promise<StagingValidationOutcome> {
+  if (row.importStatus === "Imported") {
+    return {
+      validationStatus: "Validated",
+      importStatus: "Imported",
+      errorMessage: null,
+      duplicateReason: null,
+    };
+  }
+
+  const validation = validateStagingRow(row);
+  if (!validation.valid) {
+    return {
+      validationStatus: "Invalid",
+      importStatus: "Failed",
+      errorMessage: validation.errors.join("; "),
+      duplicateReason: null,
+    };
+  }
+
+  const hashes = computePatientSearchHashes(organizationId, hashInputFromStagingRow(row));
+  const batchKey = [hashes.cnicHash, hashes.phoneHash, hashes.emailHash]
+    .filter(Boolean)
+    .join("|");
+  if (batchKey && seenHashes.has(batchKey)) {
+    const detail = formatDuplicateDetail(row, {
+      id: 0,
+      reason: [
+        hashes.cnicHash ? "CNIC" : "",
+        hashes.phoneHash ? "Phone" : "",
+        hashes.emailHash ? "Email" : "",
+      ]
+        .filter(Boolean)
+        .join(", "),
+    }).replace("Matches existing patient #0", "Duplicate row in this file");
+    return {
+      validationStatus: "Duplicate",
+      importStatus: "Duplicate",
+      duplicateReason: "Duplicate within import batch (same CNIC, phone, or email)",
+      errorMessage: detail,
+    };
+  }
+  if (batchKey) seenHashes.add(batchKey);
+
+  const duplicate = await findExistingPatientForImport(organizationId, row);
+  if (duplicate) {
+    const detail = formatDuplicateDetail(row, duplicate);
+    return {
+      validationStatus: "Duplicate",
+      importStatus: "Duplicate",
+      duplicateReason: detail,
+      errorMessage: detail,
+      importedPatientId: duplicate.id,
+    };
+  }
+
+  return {
+    validationStatus: "Validated",
+    importStatus: "Validated",
+    errorMessage: null,
+    duplicateReason: null,
+    importedPatientId: null,
+  };
+}
+
+async function attachDuplicateRows(
+  organizationId: number,
+  batchId: string,
+  summary: ImportBatchSummary,
+): Promise<ImportBatchSummary> {
+  const duplicateRows = await getDuplicateStagingRows(organizationId, batchId);
+  return { ...summary, duplicateRows };
+}
+
 export async function uploadLegacyPatientSql(params: {
   organizationId: number;
   userId: number;
   fileName: string;
   content: string;
-}): Promise<{ batchId: string; totalRecords: number }> {
+}): Promise<{ batchId: string; totalRecords: number; sqlStatements: string[] }> {
   const parsedRows = parseLegacyPatientSql(params.content);
+  const sqlStatements = extractLegacyInsertStatements(params.content);
   const batchId = randomUUID();
+
+  console.log(
+    `[PATIENT-IMPORT] Parsed ${parsedRows.length} patient row(s) from ${sqlStatements.length} SQL statement(s)`,
+  );
 
   const stagingRows = parsedRows.map((row) => ({
     organizationId: params.organizationId,
     importBatchId: batchId,
     fullName: row.fullName ?? null,
-    cnic: row.cnic ?? null,
+    cnic: row.cnic ?? row.patientId ?? null,
     phone: row.phone ?? null,
     email: row.email ?? null,
     dateOfBirth: row.dateOfBirth ?? null,
@@ -160,10 +415,10 @@ export async function uploadLegacyPatientSql(params: {
     fileName: params.fileName,
     importBatchId: batchId,
     summary: { batchId, totalRecords: stagingRows.length },
-    details: { fileName: params.fileName },
+    details: { fileName: params.fileName, sqlStatementCount: sqlStatements.length },
   });
 
-  return { batchId, totalRecords: stagingRows.length };
+  return { batchId, totalRecords: stagingRows.length, sqlStatements, parsedRecordCount: parsedRows.length };
 }
 
 export async function validateImportBatch(
@@ -181,77 +436,41 @@ export async function validateImportBatch(
       ),
     );
 
-  let validRecords = 0;
-  let invalidRecords = 0;
-  let duplicateRecords = 0;
   const seenHashes = new Set<string>();
 
   for (const row of rows) {
-    const validation = validateStagingRow(row);
-    if (!validation.valid) {
-      invalidRecords++;
-      await db
-        .update(patientImportStaging)
-        .set({
-          validationStatus: "Invalid",
-          importStatus: "Failed",
-          errorMessage: validation.errors.join("; "),
-        })
-        .where(eq(patientImportStaging.id, row.id));
+    if (row.importStatus === "Imported") {
+      const hashes = computePatientSearchHashes(organizationId, hashInputFromStagingRow(row));
+      const batchKey = [hashes.cnicHash, hashes.phoneHash, hashes.emailHash]
+        .filter(Boolean)
+        .join("|");
+      if (batchKey) seenHashes.add(batchKey);
+    }
+  }
+
+  for (const row of rows) {
+    if (row.importStatus === "Imported") {
       continue;
     }
 
-    const hashes = computePatientSearchHashes(organizationId, {
-      cnic: row.cnic,
-      phone: row.phone,
-      email: row.email,
-    });
-    const batchKey = [hashes.cnicHash, hashes.phoneHash, hashes.emailHash]
-      .filter(Boolean)
-      .join("|");
-    if (batchKey && seenHashes.has(batchKey)) {
-      duplicateRecords++;
-      await db
-        .update(patientImportStaging)
-        .set({
-          validationStatus: "Duplicate",
-          importStatus: "Duplicate",
-          duplicateReason: "Duplicate within import batch",
-          errorMessage: "Duplicate within import batch",
-        })
-        .where(eq(patientImportStaging.id, row.id));
-      continue;
-    }
-    if (batchKey) seenHashes.add(batchKey);
-
-    const duplicate = await findDuplicateByHashes(organizationId, hashes);
-    if (duplicate) {
-      duplicateRecords++;
-      await db
-        .update(patientImportStaging)
-        .set({
-          validationStatus: "Duplicate",
-          importStatus: "Duplicate",
-          duplicateReason: `Existing patient #${duplicate.id} (${duplicate.reason})`,
-          errorMessage: `Duplicate: ${duplicate.reason}`,
-        })
-        .where(eq(patientImportStaging.id, row.id));
-      continue;
-    }
-
-    validRecords++;
+    const outcome = await applyStagingRowValidation(organizationId, row, seenHashes);
     await db
       .update(patientImportStaging)
       .set({
-        validationStatus: "Validated",
-        importStatus: "Validated",
-        errorMessage: null,
-        duplicateReason: null,
+        validationStatus: outcome.validationStatus,
+        importStatus: outcome.importStatus,
+        errorMessage: outcome.errorMessage,
+        duplicateReason: outcome.duplicateReason,
+        importedPatientId: outcome.importedPatientId ?? null,
       })
       .where(eq(patientImportStaging.id, row.id));
   }
 
-  const summary = await getImportBatchSummary(organizationId, batchId);
+  const summary = await attachDuplicateRows(
+    organizationId,
+    batchId,
+    await getImportBatchSummary(organizationId, batchId),
+  );
   await writeAudit({
     organizationId,
     userId,
@@ -313,9 +532,9 @@ export async function getImportBatchSummary(
 export async function getStagingPreview(
   organizationId: number,
   batchId: string,
-  limit = 100,
+  limit?: number,
 ) {
-  return db
+  const baseQuery = db
     .select()
     .from(patientImportStaging)
     .where(
@@ -324,16 +543,172 @@ export async function getStagingPreview(
         eq(patientImportStaging.importBatchId, batchId),
       ),
     )
-    .limit(limit);
+    .orderBy(asc(patientImportStaging.id));
+
+  if (limit != null && limit > 0) {
+    return baseQuery.limit(limit);
+  }
+
+  return baseQuery;
+}
+
+export async function countStagingRows(
+  organizationId: number,
+  batchId: string,
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(patientImportStaging)
+    .where(
+      and(
+        eq(patientImportStaging.organizationId, organizationId),
+        eq(patientImportStaging.importBatchId, batchId),
+      ),
+    );
+  return Number(row?.count ?? 0);
+}
+
+export async function getDuplicateStagingRows(
+  organizationId: number,
+  batchId: string,
+): Promise<StagingRowRecord[]> {
+  const rows = await db
+    .select()
+    .from(patientImportStaging)
+    .where(
+      and(
+        eq(patientImportStaging.organizationId, organizationId),
+        eq(patientImportStaging.importBatchId, batchId),
+        or(
+          eq(patientImportStaging.importStatus, "Duplicate"),
+          eq(patientImportStaging.validationStatus, "Duplicate"),
+        ),
+      ),
+    );
+  return rows as StagingRowRecord[];
+}
+
+export async function updateStagingRow(params: {
+  organizationId: number;
+  batchId: string;
+  rowId: number;
+  updates: StagingRowUpdate;
+}): Promise<StagingRowRecord> {
+  const [existing] = await db
+    .select()
+    .from(patientImportStaging)
+    .where(
+      and(
+        eq(patientImportStaging.id, params.rowId),
+        eq(patientImportStaging.organizationId, params.organizationId),
+        eq(patientImportStaging.importBatchId, params.batchId),
+      ),
+    );
+
+  if (!existing) {
+    throw new Error("Staging row not found");
+  }
+  if (existing.importStatus === "Imported") {
+    throw new Error("Cannot edit a row that is already imported");
+  }
+
+  const patch: Record<string, unknown> = {
+    validationStatus: "Pending",
+    importStatus: "Pending",
+    errorMessage: null,
+    duplicateReason: null,
+    importedPatientId: null,
+  };
+  if (params.updates.fullName !== undefined) patch.fullName = params.updates.fullName;
+  if (params.updates.cnic !== undefined) patch.cnic = params.updates.cnic;
+  if (params.updates.phone !== undefined) patch.phone = params.updates.phone;
+  if (params.updates.email !== undefined) patch.email = params.updates.email;
+  if (params.updates.dateOfBirth !== undefined) patch.dateOfBirth = params.updates.dateOfBirth;
+  if (params.updates.gender !== undefined) patch.gender = params.updates.gender;
+  if (params.updates.address !== undefined) patch.address = params.updates.address;
+
+  const [updated] = await db
+    .update(patientImportStaging)
+    .set(patch)
+    .where(eq(patientImportStaging.id, params.rowId))
+    .returning();
+
+  return updated as StagingRowRecord;
+}
+
+export async function validateStagingRowById(params: {
+  organizationId: number;
+  batchId: string;
+  rowId: number;
+}): Promise<StagingRowRecord> {
+  const [row] = await db
+    .select()
+    .from(patientImportStaging)
+    .where(
+      and(
+        eq(patientImportStaging.id, params.rowId),
+        eq(patientImportStaging.organizationId, params.organizationId),
+        eq(patientImportStaging.importBatchId, params.batchId),
+      ),
+    );
+
+  if (!row) {
+    throw new Error("Staging row not found");
+  }
+  if (row.importStatus === "Imported") {
+    return row as StagingRowRecord;
+  }
+
+  const batchRows = await db
+    .select()
+    .from(patientImportStaging)
+    .where(
+      and(
+        eq(patientImportStaging.organizationId, params.organizationId),
+        eq(patientImportStaging.importBatchId, params.batchId),
+      ),
+    );
+
+  const seenHashes = new Set<string>();
+  for (const other of batchRows) {
+    if (other.id === row.id || other.importStatus === "Imported") continue;
+    if (other.validationStatus !== "Validated" && other.importStatus !== "Validated") continue;
+    const hashes = computePatientSearchHashes(params.organizationId, hashInputFromStagingRow(other));
+    const batchKey = [hashes.cnicHash, hashes.phoneHash, hashes.emailHash]
+      .filter(Boolean)
+      .join("|");
+    if (batchKey) seenHashes.add(batchKey);
+  }
+
+  const outcome = await applyStagingRowValidation(params.organizationId, row, seenHashes);
+  const [updated] = await db
+    .update(patientImportStaging)
+    .set({
+      validationStatus: outcome.validationStatus,
+      importStatus: outcome.importStatus,
+      errorMessage: outcome.errorMessage,
+      duplicateReason: outcome.duplicateReason,
+      importedPatientId: outcome.importedPatientId ?? null,
+    })
+    .where(eq(patientImportStaging.id, params.rowId))
+    .returning();
+
+  return updated as StagingRowRecord;
 }
 
 export async function importValidatedBatch(params: {
   organizationId: number;
   batchId: string;
   userId: number;
+  /** When true (default), re-validates the whole batch before import */
+  preValidate?: boolean;
 }): Promise<ImportBatchSummary> {
   if (!isPatientEncryptionConfigured()) {
     throw new Error("Patient encryption is not configured");
+  }
+
+  if (params.preValidate !== false) {
+    await validateImportBatch(params.organizationId, params.batchId, params.userId);
   }
 
   const rows = await db
@@ -344,30 +719,63 @@ export async function importValidatedBatch(params: {
         eq(patientImportStaging.organizationId, params.organizationId),
         eq(patientImportStaging.importBatchId, params.batchId),
         eq(patientImportStaging.validationStatus, "Validated"),
+        or(
+          eq(patientImportStaging.importStatus, "Validated"),
+          eq(patientImportStaging.importStatus, "Failed"),
+          eq(patientImportStaging.importStatus, "Pending"),
+        ),
       ),
     );
 
   let importedRecords = 0;
   let failedRecords = 0;
   let duplicateRecords = 0;
+  const insertedPatients: NonNullable<ImportBatchSummary["insertedPatients"]> = [];
+
+  if (rows.length === 0) {
+    const snapshot = await attachDuplicateRows(
+      params.organizationId,
+      params.batchId,
+      await getImportBatchSummary(params.organizationId, params.batchId),
+    );
+    const noteText = (snapshot.duplicateRows ?? [])
+      .slice(0, 5)
+      .map((d) => `${d.fullName || "Record"}: ${d.duplicateReason || d.errorMessage || "Duplicate"}`)
+      .join(" | ");
+    return {
+      ...snapshot,
+      insertedThisRun: 0,
+      skippedDuplicatesThisRun: snapshot.duplicateRecords,
+      insertedPatients: [],
+      databaseSchema: activeDbSchema,
+      message:
+        snapshot.duplicateRecords > 0
+          ? `No new patients inserted. ${snapshot.duplicateRecords} duplicate record(s) skipped.` +
+            (noteText ? ` ${noteText}` : "")
+          : `No validated records ready to import. ${snapshot.validRecords} valid, ${snapshot.pendingRecords} pending.`,
+    };
+  }
+
+  console.log(
+    `[PATIENT-IMPORT] Importing ${rows.length} validated row(s) for batch ${params.batchId} (org ${params.organizationId})`,
+  );
 
   for (const row of rows) {
     try {
-      const hashes = computePatientSearchHashes(params.organizationId, {
-        cnic: row.cnic,
-        phone: row.phone,
-        email: row.email,
-      });
+      const nationalId = resolveStagingNationalId(row);
+      const hashes = computePatientSearchHashes(params.organizationId, hashInputFromStagingRow(row));
 
-      const duplicate = await findDuplicateByHashes(params.organizationId, hashes);
+      const duplicate = await findExistingPatientForImport(params.organizationId, row);
       if (duplicate) {
         duplicateRecords++;
+        const detail = formatDuplicateDetail(row, duplicate);
         await db
           .update(patientImportStaging)
           .set({
             importStatus: "Duplicate",
-            duplicateReason: `Existing patient #${duplicate.id} (${duplicate.reason})`,
-            errorMessage: `Skipped duplicate (${duplicate.reason})`,
+            importedPatientId: duplicate.id,
+            duplicateReason: detail,
+            errorMessage: detail,
           })
           .where(eq(patientImportStaging.id, row.id));
         continue;
@@ -378,7 +786,10 @@ export async function importValidatedBatch(params: {
         row.email?.trim() ||
         `legacy-${hashes.cnicHash?.slice(0, 12) || row.id}@import.local`;
       const phone = normalizePhone(row.phone || "");
-      const cnic = formatCnicForStorage(row.cnic || "");
+      const rawNationalId = row.cnic?.trim() || nationalId;
+      const cnic = rawNationalId.includes("-") && rawNationalId.length === 13
+        ? formatCnicForStorage(rawNationalId)
+        : rawNationalId;
 
       let linkedUserId: number | null = null;
       const existingUser = await storage.getUserByEmail(email, params.organizationId);
@@ -448,12 +859,41 @@ export async function importValidatedBatch(params: {
         createdBy: params.userId,
       });
 
+      const [verified] = await db
+        .select({ id: patients.id, patientId: patients.patientId, organizationId: patients.organizationId })
+        .from(patients)
+        .where(
+          and(
+            eq(patients.id, created.id),
+            eq(patients.organizationId, params.organizationId),
+          ),
+        )
+        .limit(1);
+
+      if (!verified) {
+        throw new Error(
+          `Insert verification failed: patient id ${created.id} was not found in ${activeDbSchema}.patients`,
+        );
+      }
+
+      console.log(
+        `[PATIENT-IMPORT] Inserted patient dbId=${verified.id} patientId=${verified.patientId} org=${verified.organizationId} schema=${activeDbSchema}`,
+      );
+
       importedRecords++;
+      insertedPatients.push({
+        stagingId: row.id,
+        patientDbId: verified.id,
+        patientId: verified.patientId,
+        fullName: row.fullName?.trim() || `${firstName} ${lastName}`.trim(),
+        email,
+        phone: row.phone?.trim() || phone || undefined,
+      });
       await db
         .update(patientImportStaging)
         .set({
           importStatus: "Imported",
-          importedPatientId: created.id,
+          importedPatientId: verified.id,
           importedAt: new Date(),
           errorMessage: null,
         })
@@ -461,6 +901,7 @@ export async function importValidatedBatch(params: {
     } catch (error) {
       failedRecords++;
       const message = error instanceof Error ? error.message : "Import failed";
+      console.error(`[PATIENT-IMPORT] Row ${row.id} import failed:`, message);
       await db
         .update(patientImportStaging)
         .set({
@@ -472,6 +913,29 @@ export async function importValidatedBatch(params: {
   }
 
   const summary = await getImportBatchSummary(params.organizationId, params.batchId);
+  const duplicateRows = await getDuplicateStagingRows(params.organizationId, params.batchId);
+  let message: string | undefined;
+  if (importedRecords === 0) {
+    if (duplicateRecords > 0 || summary.duplicateRecords > 0) {
+      const dupCount = Math.max(duplicateRecords, summary.duplicateRecords);
+      message = `No new patients inserted — ${dupCount} duplicate record(s) skipped. Edit duplicates in the review dialog and insert remaining.`;
+    } else if (failedRecords > 0) {
+      message = `Import finished with 0 inserts — ${failedRecords} record(s) failed (see Notes column).`;
+    }
+  } else {
+    const ids = insertedPatients.map((p) => `${p.patientId} (db id ${p.patientDbId})`).join(", ");
+    const skipNote =
+      duplicateRecords > 0
+        ? ` Skipped ${duplicateRecords} duplicate(s).`
+        : summary.duplicateRecords > 0
+          ? ` ${summary.duplicateRecords} duplicate(s) remain — edit and insert remaining.`
+          : "";
+    message =
+      importedRecords === 1
+        ? `Patient inserted into the database successfully (${ids}).${skipNote}`
+        : `${importedRecords} patients inserted into the database successfully (${ids}).${skipNote}`;
+  }
+
   await writeAudit({
     organizationId: params.organizationId,
     userId: params.userId,
@@ -479,13 +943,26 @@ export async function importValidatedBatch(params: {
     importBatchId: params.batchId,
     summary: {
       ...summary,
-      importedRecords,
+      importedRecords: summary.importedRecords,
       failedRecords: summary.failedRecords,
       duplicateRecords: summary.duplicateRecords,
     },
+    details: {
+      insertedThisRun: importedRecords,
+      skippedDuplicatesThisRun: duplicateRecords,
+      insertedPatients,
+    },
   });
 
-  return summary;
+  return {
+    ...summary,
+    insertedThisRun: importedRecords,
+    skippedDuplicatesThisRun: duplicateRecords,
+    insertedPatients,
+    duplicateRows,
+    databaseSchema: activeDbSchema,
+    message,
+  };
 }
 
 export async function encryptExistingPlainPatients(params: {

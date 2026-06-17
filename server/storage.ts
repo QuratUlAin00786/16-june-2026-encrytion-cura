@@ -1343,6 +1343,9 @@ export class DatabaseStorage implements IStorage {
     if (!rawPatient) return undefined;
 
     try {
+      if (!isEncryptedPatientStorageRow(rawPatient)) {
+        return this.formatPatientRow(rawPatient);
+      }
       const decrypted = await decryptPatientFromStorageRow(rawPatient as Record<string, unknown>);
       return this.formatPatientRow(decrypted);
     } catch (err: unknown) {
@@ -1454,8 +1457,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   private async decryptPatientRows(rows: unknown[]): Promise<Patient[]> {
-    const decrypted = await Promise.all(rows.map((row) => this.decryptPatientRow(row)));
-    return decrypted.filter(Boolean) as Patient[];
+    const results: Patient[] = [];
+    const batchSize = 20;
+    for (let i = 0; i < rows.length; i += batchSize) {
+      const batch = rows.slice(i, i + batchSize);
+      const decrypted = await Promise.all(batch.map((row) => this.decryptPatientRow(row)));
+      results.push(...(decrypted.filter(Boolean) as Patient[]));
+    }
+    return results;
   }
 
   async getPatient(id: number, organizationId: number): Promise<Patient | undefined> {

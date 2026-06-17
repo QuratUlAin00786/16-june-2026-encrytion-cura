@@ -38,6 +38,19 @@ function resolveEmailFromAddress(override?: string): string {
   return String(raw).replace(/^["']|["']$/g, "").trim();
 }
 
+function isSmtpConfigured(): boolean {
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASSWORD?.trim();
+  if (host && user && pass) {
+    return true;
+  }
+  const gmailHost = process.env.GMAIL_SMTP_HOST?.trim();
+  const gmailUser = process.env.GMAIL_SMTP_USER?.trim();
+  const gmailPass = process.env.GMAIL_SMTP_PASSWORD?.trim();
+  return Boolean(gmailHost && gmailUser && gmailPass);
+}
+
 class EmailService {
   private transporter: nodemailer.Transporter;
   private initialized: boolean = false;
@@ -105,13 +118,14 @@ class EmailService {
 
   private async initializeProductionEmailService() {
     try {
-      const smtpHost = process.env.SMTP_HOST || process.env.GMAIL_SMTP_HOST;
+      const smtpHost = process.env.SMTP_HOST?.trim() || process.env.GMAIL_SMTP_HOST?.trim();
       const smtpPort = Number(
         process.env.SMTP_PORT ?? process.env.GMAIL_SMTP_PORT ?? 587,
       );
-      const smtpUser = process.env.SMTP_USER || process.env.GMAIL_SMTP_USER;
+      const smtpUser = process.env.SMTP_USER?.trim() || process.env.GMAIL_SMTP_USER?.trim();
       const smtpPass =
-        process.env.SMTP_PASSWORD || process.env.GMAIL_SMTP_PASSWORD;
+        process.env.SMTP_PASSWORD?.trim() || process.env.GMAIL_SMTP_PASSWORD?.trim();
+      const usingCuraSmtp = Boolean(process.env.SMTP_HOST?.trim());
 
       if (smtpHost && smtpUser && smtpPass) {
         const secure =
@@ -125,6 +139,7 @@ class EmailService {
           port: smtpPort,
           secure,
           user: smtpUser,
+          provider: usingCuraSmtp ? "cura-smtp" : "gmail-fallback-env",
         });
 
         this.transporter = nodemailer.createTransport({
@@ -248,6 +263,25 @@ class EmailService {
         ...options,
         from: resolveEmailFromAddress(options.from),
       };
+
+      // Prefer configured SMTP (e.g. smtp.curaemr.ai) when credentials are in .env
+      if (isSmtpConfigured()) {
+        const smtpResult = await this.sendWithSMTP(normalizedOptions);
+        if (smtpResult.success) {
+          return { success: true };
+        }
+        console.log("[EMAIL] SMTP failed, trying SendGrid fallback...");
+        const sendGridResult = await this.sendWithSendGrid(normalizedOptions);
+        if (sendGridResult.success) {
+          return { success: true };
+        }
+        const errorMessage =
+          smtpResult.error ||
+          sendGridResult.error ||
+          "Unknown error while sending email via SMTP/SendGrid";
+        console.error("[EMAIL] 🚨 EMAIL DELIVERY FAILED:", errorMessage);
+        return { success: false, error: errorMessage };
+      }
 
       const sendGridResult = await this.sendWithSendGrid(normalizedOptions);
       if (sendGridResult.success) {

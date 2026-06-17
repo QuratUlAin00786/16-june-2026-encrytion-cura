@@ -53,10 +53,34 @@ export function isValidCnicFormat(value: string): boolean {
   return /^\d{5}-\d{7}-\d$/i.test(trimmed) || /^\d{13}$/.test(normalizeCnic(trimmed));
 }
 
-/** Pakistan mobile: 03xxxxxxxxx */
+/** Pakistan mobile: 03xxxxxxxxx, or international 10–15 digits */
 export function isValidPhoneFormat(value: string): boolean {
   const normalized = normalizePhone(value);
-  return /^03\d{9}$/.test(normalized);
+  if (/^03\d{9}$/.test(normalized)) return true;
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 10 && digits.length <= 15;
+}
+
+/** UK NHS number: 10 digits */
+export function isValidNhsFormat(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  return /^\d{10}$/.test(digits);
+}
+
+/** Legacy patient id from dump (e.g. P000027) */
+export function isValidLegacyPatientId(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.length >= 4 && /^[A-Za-z0-9-]+$/.test(trimmed);
+}
+
+export function isValidNationalIdFormat(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  return (
+    isValidCnicFormat(trimmed) ||
+    isValidNhsFormat(trimmed) ||
+    isValidLegacyPatientId(trimmed)
+  );
 }
 
 export function isValidEmailFormat(value: string): boolean {

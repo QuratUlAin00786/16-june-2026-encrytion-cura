@@ -1,7 +1,7 @@
 import { useAuth } from "./use-auth";
 import { isDoctorLike } from "@/lib/role-utils";
 import { useQuery } from "@tanstack/react-query";
-import { getActiveSubdomain } from "@/lib/subdomain-utils";
+import { buildUrl, getTenantSubdomain } from "@/lib/queryClient";
 
 export type UserRole = string;
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete';
@@ -38,7 +38,7 @@ export function useRolePermissions() {
     queryFn: async () => {
       if (!user?.role) return null;
       const token = localStorage.getItem('auth_token');
-      const subdomain = getActiveSubdomain(); // Use the same subdomain detection logic as queryClient
+      const subdomain = getTenantSubdomain();
       const headers: Record<string, string> = {
         'X-Tenant-Subdomain': subdomain
       };
@@ -47,7 +47,7 @@ export function useRolePermissions() {
         headers['Authorization'] = `Bearer ${token}`;
       }
       
-      const response = await fetch(`/api/roles/by-name/${user.role}`, {
+      const response = await fetch(buildUrl(`/api/roles/by-name/${encodeURIComponent(user.role)}`), {
         headers,
         credentials: 'include',
       });

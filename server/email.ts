@@ -1,3 +1,4 @@
+import { emailService } from "./services/email";
 import { MailService } from '@sendgrid/mail';
 
 const mailService = new MailService();
@@ -69,16 +70,38 @@ const formatSendGridError = (error: any): string => {
 };
 
 export async function sendEmailDetailed(params: EmailParams): Promise<SendEmailResult> {
+  const from =
+    params.from ||
+    process.env.EMAIL_FROM?.replace(/^["']|["']$/g, "").trim() ||
+    process.env.DEFAULT_FROM_EMAIL?.replace(/^["']|["']$/g, "").trim() ||
+    "Cura EMR <noreply@curaemr.ai>";
+
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+    const smtpResult = await emailService.sendEmailWithReport({
+      to: params.to,
+      from,
+      subject: params.subject,
+      text: params.text,
+      html: params.html,
+      attachments: params.attachments?.map((att) => ({
+        filename: att.filename,
+        content: att.content ? Buffer.from(att.content, "base64") : undefined,
+        contentType: att.type,
+      })),
+    });
+    return smtpResult;
+  }
+
   if (!process.env.SENDGRID_API_KEY) {
-    const message = "SENDGRID_API_KEY environment variable is not set";
-    console.error('SendGrid email error:', message);
+    const message = "No email transport configured (set SMTP_* or SENDGRID_API_KEY)";
+    console.error("SendGrid email error:", message);
     return { success: false, error: message };
   }
   
   try {
     await mailService.send({
       to: params.to,
-      from: params.from,
+      from,
       subject: params.subject,
       text: params.text,
       html: params.html,

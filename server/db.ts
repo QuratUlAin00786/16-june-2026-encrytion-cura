@@ -46,7 +46,7 @@ export const pool = new Pool({
 
   idleTimeoutMillis: 10000,
 
-  query_timeout: 7000,
+  query_timeout: 30000,
 
   maxUses: 7500,
 
@@ -62,7 +62,7 @@ pool.on("connect", (client: any) => {
 
   client.query(`SET search_path TO ${searchPath}`);
 
-  client.query("SET statement_timeout TO 8000");
+  client.query("SET statement_timeout TO 35000");
 
 });
 

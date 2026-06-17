@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { storeSubdomain } from "@/lib/subdomain-utils";
-import { ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowLeft, Mail, Lock, Eye, EyeOff, Loader2, ShieldCheck, LockKeyhole } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -127,8 +127,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-to-br from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
+      {/* Encryption-themed background icons */}
+      <div
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        aria-hidden="true"
+      >
+        <ShieldCheck className="absolute -left-8 top-[8%] h-44 w-44 text-blue-200/50 dark:text-blue-900/40 rotate-[-12deg]" />
+        <LockKeyhole className="absolute right-[6%] top-[12%] h-36 w-36 text-blue-300/40 dark:text-blue-800/35 rotate-[18deg]" />
+        <Lock className="absolute left-[10%] bottom-[14%] h-52 w-52 text-blue-200/45 dark:text-blue-900/30 rotate-[8deg]" />
+        <ShieldCheck className="absolute right-[-4%] bottom-[10%] h-56 w-56 text-blue-300/35 dark:text-blue-800/30 rotate-[24deg]" />
+        <LockKeyhole className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 text-blue-100/30 dark:text-blue-950/25" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
           <Link

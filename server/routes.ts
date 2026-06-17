@@ -4370,9 +4370,7 @@ The Cura EMR Team`,
     }
   });
 
-  // Legacy patient SQL import — register immediately before global /api auth
-  registerPatientImportRoutes(app);
-
+  // Legacy patient SQL import — register after global /api auth (tenant + auth run via middleware stack)
   // Protected routes (auth required)
   // Exclude /saas/ routes - they have their own auth middleware chain
   app.use("/api", (req, res, next) => {
@@ -4387,6 +4385,8 @@ The Cura EMR Team`,
     }
     return authMiddleware(req, res, next);
   });
+
+  registerPatientImportRoutes(app);
 
   // POST /api/radiology-images (must be after app.use("/api", authMiddleware) so it uses the same auth as all /api routes)
   app.post("/api/radiology-images", async (req: TenantRequest, res) => {
@@ -5415,6 +5415,11 @@ This treatment plan should be reviewed and adjusted based on individual patient 
   // Patient routes
   app.get("/api/patients", authMiddleware, requireRole(["admin", "doctor", "nurse", "patient"]), async (req: TenantRequest, res) => {
     try {
+      const orgId = req.tenant?.id ?? req.user?.organizationId;
+      if (!orgId) {
+        return res.status(400).json({ error: "Organization context required" });
+      }
+
       // No default limit: return all patients so count (e.g. "12 patients found") is accurate for doctor/nurse/admin
       const limitParam = req.query.limit as string;
       const limit = limitParam !== undefined && limitParam !== '' ? parseInt(limitParam, 10) : undefined;
@@ -5426,8 +5431,7 @@ This treatment plan should be reviewed and adjusted based on individual patient 
         isActive = isActiveParam === 'true';
       }
 
-      const patients = await storage.getPatientsByOrganization(req.tenant!.id, limit, isActive);
-      const orgId = req.tenant!.id;
+      const patients = await storage.getPatientsByOrganization(orgId, limit, isActive);
       const userIds = [
         ...new Set(
           patients
@@ -12487,7 +12491,7 @@ ${clinicName}`;
   });
 
   // Get role permissions by role name
-  app.get("/api/roles/by-name/:roleName", authMiddleware, async (req: TenantRequest, res) => {
+  app.get("/api/roles/by-name/:roleName", tenantMiddleware, authMiddleware, async (req: TenantRequest, res) => {
     try {
       const { roleName } = req.params;
 
