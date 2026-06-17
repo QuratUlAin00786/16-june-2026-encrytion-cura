@@ -9,6 +9,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { seedDatabase } from "./seed-data";
 import { smsScheduler } from "./services/sms-scheduler";
 import { startSubscriptionReminderScheduler } from "./services/subscription-reminders";
+import { logEnvSmtpConfigStatus } from "./services/email";
 
 /** Append to CSP connect-src for LiveKit validate + WebSocket (self-hosted IP, LiveKit Cloud, mk1). */
 function getLiveKitCspConnectExtras(): string {
@@ -176,6 +177,7 @@ app.use((req, res, next) => {
   server.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
     log("🚀 Server is ready for health checks!");
+    logEnvSmtpConfigStatus();
     
     // Start the SMS scheduler for automatic scheduled message sending
     smsScheduler.start();

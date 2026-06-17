@@ -34,6 +34,16 @@ export default function SaaSSettings() {
     secure?: boolean;
     error?: string;
     verifyError?: string;
+    envFileExists?: boolean;
+    envFile?: string;
+    attempts?: Array<{
+      label: string;
+      port: number;
+      secure: boolean;
+      success: boolean;
+      error?: string;
+      code?: string;
+    }>;
   } | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -548,6 +558,40 @@ export default function SaaSSettings() {
                 <p><span className="font-semibold font-sans">User:</span> {smtpTestResult.user}</p>
                 <p><span className="font-semibold font-sans">From:</span> {smtpTestResult.from}</p>
                 <p><span className="font-semibold font-sans">SSL:</span> {smtpTestResult.secure ? 'yes' : 'no'}</p>
+              </div>
+            )}
+
+            {smtpTestResult?.envFileExists === false && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-900 text-xs">
+                <p className="font-medium">Production note</p>
+                <p className="mt-1 break-all">
+                  No <code>.env</code> file on this server ({smtpTestResult.envFile}).
+                  Copy SMTP settings into the production environment or deploy <code>.env</code>.
+                </p>
+              </div>
+            )}
+
+            {smtpTestResult?.attempts && smtpTestResult.attempts.length > 0 && (
+              <div className="space-y-2">
+                <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
+                  Connection attempts
+                </p>
+                <ul className="space-y-1 text-xs font-mono">
+                  {smtpTestResult.attempts.map((attempt) => (
+                    <li
+                      key={`${attempt.label}-${attempt.port}`}
+                      className={
+                        attempt.success
+                          ? 'text-green-700'
+                          : 'text-red-700 break-all'
+                      }
+                    >
+                      {attempt.success ? '✓' : '✗'} {attempt.label}
+                      {attempt.code ? ` [${attempt.code}]` : ''}
+                      {!attempt.success && attempt.error ? ` — ${attempt.error}` : ''}
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 

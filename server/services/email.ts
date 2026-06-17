@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 import sgMail from '@sendgrid/mail';
+import fs from 'fs';
+import { PROJECT_ENV_FILE } from '../db-config';
 
 interface EmailOptions {
   to: string;
@@ -49,6 +51,124 @@ function isSmtpConfigured(): boolean {
   const gmailUser = process.env.GMAIL_SMTP_USER?.trim();
   const gmailPass = process.env.GMAIL_SMTP_PASSWORD?.trim();
   return Boolean(gmailHost && gmailUser && gmailPass);
+}
+
+type SmtpConnectionProfile = {
+  port: number;
+  secure: boolean;
+  requireTLS?: boolean;
+  label: string;
+};
+
+function smtpTlsRejectUnauthorized(): boolean {
+  if (process.env.SMTP_REJECT_UNAUTHORIZED === "false") {
+    return false;
+  }
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    return false;
+  }
+  return true;
+}
+
+function readEnvSmtpCredentials() {
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASSWORD?.trim();
+  const primaryPort = Number(process.env.SMTP_PORT ?? 465);
+  const primarySecure =
+    primaryPort === 465 || process.env.SMTP_SECURE === "true";
+  return { host, user, pass, primaryPort, primarySecure };
+}
+
+function getSmtpConnectionProfiles(): SmtpConnectionProfile[] {
+  const { primaryPort, primarySecure } = readEnvSmtpCredentials();
+  const profiles: SmtpConnectionProfile[] = [
+    {
+      port: primaryPort,
+      secure: primarySecure,
+      label: `configured (port ${primaryPort})`,
+    },
+  ];
+
+  // Production hosts often block outbound 465; try STARTTLS on 587 as fallback.
+  if (primaryPort !== 587) {
+    profiles.push({
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      label: "fallback STARTTLS (port 587)",
+    });
+  }
+  if (primaryPort !== 465) {
+    profiles.push({
+      port: 465,
+      secure: true,
+      label: "fallback SSL (port 465)",
+    });
+  }
+
+  return profiles;
+}
+
+function createEnvSmtpTransporter(
+  host: string,
+  user: string,
+  pass: string,
+  profile: SmtpConnectionProfile,
+): nodemailer.Transporter {
+  return nodemailer.createTransport({
+    host,
+    port: profile.port,
+    secure: profile.secure,
+    requireTLS: profile.requireTLS,
+    auth: { user, pass },
+    tls: { rejectUnauthorized: smtpTlsRejectUnauthorized() },
+    connectionTimeout: 25_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 25_000,
+  });
+}
+
+function isSmtpConnectionError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string };
+  const code = err?.code || "";
+  const message = err?.message || "";
+  return (
+    code === "ENOTFOUND" ||
+    code === "ECONNREFUSED" ||
+    code === "ECONNRESET" ||
+    code === "ETIMEDOUT" ||
+    code === "ESOCKET" ||
+    /connection timeout/i.test(message) ||
+    /self[- ]signed certificate/i.test(message) ||
+    /certificate/i.test(message)
+  );
+}
+
+/** Log whether SMTP_* from .env is visible to the running server (helps debug production). */
+export function logEnvSmtpConfigStatus(): void {
+  const envFileExists = fs.existsSync(PROJECT_ENV_FILE);
+  const { host, user, pass, primaryPort } = readEnvSmtpCredentials();
+  console.log("[EMAIL] Startup SMTP status:", {
+    envFile: PROJECT_ENV_FILE,
+    envFileExists,
+    configured: Boolean(host && user && pass),
+    host: host || "(missing)",
+    port: primaryPort,
+    user: user || "(missing)",
+    passwordSet: Boolean(pass),
+    tlsRejectUnauthorized: smtpTlsRejectUnauthorized(),
+    nodeEnv: process.env.NODE_ENV || "(unset)",
+  });
+  if (!envFileExists) {
+    console.warn(
+      "[EMAIL] ⚠️ .env file not found on server — set SMTP_HOST, SMTP_USER, SMTP_PASSWORD in the deployment environment.",
+    );
+  } else if (!host || !user || !pass) {
+    console.warn(
+      "[EMAIL] ⚠️ SMTP_* variables missing after loading .env — welcome emails will fail in production.",
+    );
+  }
 }
 
 class EmailService {
@@ -151,7 +271,7 @@ class EmailService {
             pass: smtpPass,
           },
           tls: {
-            rejectUnauthorized: process.env.SMTP_REJECT_UNAUTHORIZED !== "false",
+            rejectUnauthorized: smtpTlsRejectUnauthorized(),
           },
           connectionTimeout: 60000,
           greetingTimeout: 30000,
@@ -2066,6 +2186,15 @@ ${organizationName}`;
   }
 }
 
+export type SmtpTestAttempt = {
+  label: string;
+  port: number;
+  secure: boolean;
+  success: boolean;
+  error?: string;
+  code?: string;
+};
+
 export type SmtpTestResult = {
   success: boolean;
   message?: string;
@@ -2076,130 +2205,156 @@ export type SmtpTestResult = {
   secure?: boolean;
   error?: string;
   verifyError?: string;
+  attempts?: SmtpTestAttempt[];
+  envFileExists?: boolean;
+  envFile?: string;
 };
 
-/** Verify SMTP connection using SMTP_* from .env (no email sent). */
+/** Verify SMTP connection using SMTP_* from .env (no email sent). Tries port fallbacks. */
 export async function testEnvSmtpConnection(): Promise<SmtpTestResult> {
-  const smtpHost = process.env.SMTP_HOST?.trim();
-  const smtpPort = Number(process.env.SMTP_PORT ?? 587);
-  const smtpUser = process.env.SMTP_USER?.trim();
-  const smtpPass = process.env.SMTP_PASSWORD?.trim();
+  const { host: smtpHost, user: smtpUser, pass: smtpPass, primaryPort, primarySecure } =
+    readEnvSmtpCredentials();
   const from = resolveEmailFromAddress();
+  const envFileExists = fs.existsSync(PROJECT_ENV_FILE);
 
   const base: SmtpTestResult = {
     success: false,
     host: smtpHost,
-    port: smtpPort,
+    port: primaryPort,
     user: smtpUser,
     from,
-    secure: smtpPort === 465 || process.env.SMTP_SECURE === "true",
+    secure: primarySecure,
+    envFileExists,
+    envFile: PROJECT_ENV_FILE,
+    attempts: [],
   };
 
   if (!smtpHost || !smtpUser || !smtpPass) {
     return {
       ...base,
-      error:
-        "SMTP not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in .env",
+      error: envFileExists
+        ? "SMTP not configured in .env. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD."
+        : `.env not found at ${PROJECT_ENV_FILE}. Copy SMTP settings to the production server.`,
     };
   }
 
-  const rejectUnauthorized =
-    process.env.SMTP_REJECT_UNAUTHORIZED === "false"
-      ? false
-      : process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
+  const attempts: SmtpTestAttempt[] = [];
 
-  const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: base.secure,
-    auth: { user: smtpUser, pass: smtpPass },
-    tls: { rejectUnauthorized },
-    connectionTimeout: 20_000,
-    greetingTimeout: 15_000,
-    socketTimeout: 20_000,
-  });
+  for (const profile of getSmtpConnectionProfiles()) {
+    const transporter = createEnvSmtpTransporter(
+      smtpHost,
+      smtpUser,
+      smtpPass,
+      profile,
+    );
 
-  try {
-    await transporter.verify();
-    return {
-      ...base,
-      success: true,
-      message: `Connected to ${smtpHost}:${smtpPort} as ${smtpUser}`,
-    };
-  } catch (error: unknown) {
-    const verifyError =
-      error instanceof Error ? error.message : String(error);
-    return {
-      ...base,
-      error: verifyError,
-      verifyError,
-      message: `Could not connect to ${smtpHost}:${smtpPort}`,
-    };
+    try {
+      await transporter.verify();
+      attempts.push({
+        label: profile.label,
+        port: profile.port,
+        secure: profile.secure,
+        success: true,
+      });
+      return {
+        ...base,
+        success: true,
+        port: profile.port,
+        secure: profile.secure,
+        attempts,
+        message: `Connected to ${smtpHost}:${profile.port} as ${smtpUser} (${profile.label})`,
+      };
+    } catch (error: unknown) {
+      const err = error as { message?: string; code?: string };
+      attempts.push({
+        label: profile.label,
+        port: profile.port,
+        secure: profile.secure,
+        success: false,
+        error: err?.message || String(error),
+        code: err?.code,
+      });
+    }
   }
+
+  const lastAttempt = attempts[attempts.length - 1];
+  const verifyError = lastAttempt?.error || "All SMTP connection attempts failed";
+  const hint =
+    lastAttempt?.code === "ETIMEDOUT" || lastAttempt?.code === "ECONNREFUSED"
+      ? " Production servers often block outbound port 465 — ask your host to allow SMTP to smtp.curaemr.ai on ports 465 and 587."
+      : "";
+
+  return {
+    ...base,
+    attempts,
+    error: verifyError + hint,
+    verifyError,
+    message: `Could not connect to ${smtpHost}`,
+  };
 }
 
-/** Send mail using SMTP_HOST / SMTP_USER / SMTP_PASSWORD from .env (fresh transport per send). */
+/** Send mail using SMTP_* from .env. Tries configured port then 587/465 fallbacks. */
 export async function sendEmailViaEnvSmtp(
   options: EmailOptions,
 ): Promise<SendEmailReport> {
-  const smtpHost = process.env.SMTP_HOST?.trim();
-  const smtpPort = Number(process.env.SMTP_PORT ?? 587);
-  const smtpUser = process.env.SMTP_USER?.trim();
-  const smtpPass = process.env.SMTP_PASSWORD?.trim();
+  const { host: smtpHost, user: smtpUser, pass: smtpPass } = readEnvSmtpCredentials();
 
   if (!smtpHost || !smtpUser || !smtpPass) {
     return {
       success: false,
       error:
-        "SMTP not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in .env",
+        "SMTP not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in .env on the production server.",
     };
   }
 
-  const secure =
-    smtpPort === 465 || process.env.SMTP_SECURE === "true";
-
-  const rejectUnauthorized =
-    process.env.SMTP_REJECT_UNAUTHORIZED === "false"
-      ? false
-      : process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "0";
-
-  const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure,
-    auth: { user: smtpUser, pass: smtpPass },
-    tls: { rejectUnauthorized },
-    connectionTimeout: 20_000,
-    greetingTimeout: 15_000,
-    socketTimeout: 20_000,
-  });
-
   const from = resolveEmailFromAddress(options.from);
+  const mail = {
+    from,
+    to: options.to,
+    subject: options.subject,
+    text: options.text,
+    html: options.html,
+    attachments: options.attachments,
+  };
 
-  try {
-    const result = await transporter.sendMail({
-      from,
-      to: options.to,
-      subject: options.subject,
-      text: options.text,
-      html: options.html,
-      attachments: options.attachments,
-    });
-    console.log(
-      "[EMAIL] ✅ Sent via env SMTP:",
-      result.messageId,
-      "to",
-      options.to,
-      "from",
-      from,
+  let lastError = "SMTP send failed";
+
+  for (const profile of getSmtpConnectionProfiles()) {
+    const transporter = createEnvSmtpTransporter(
+      smtpHost,
+      smtpUser,
+      smtpPass,
+      profile,
     );
-    return { success: true };
-  } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "SMTP send failed";
-    console.error("[EMAIL] ❌ Env SMTP failed:", message);
-    return { success: false, error: message };
+
+    try {
+      const result = await transporter.sendMail(mail);
+      console.log(
+        "[EMAIL] ✅ Sent via env SMTP:",
+        result.messageId,
+        "to",
+        options.to,
+        "via",
+        `${smtpHost}:${profile.port}`,
+        `(${profile.label})`,
+      );
+      return { success: true };
+    } catch (error: unknown) {
+      const err = error as { message?: string; code?: string };
+      lastError = err?.message || "SMTP send failed";
+      console.warn(
+        `[EMAIL] SMTP send failed on ${profile.label}:`,
+        lastError,
+        err?.code || "",
+      );
+      if (!isSmtpConnectionError(error)) {
+        return { success: false, error: lastError };
+      }
+    }
   }
+
+  console.error("[EMAIL] ❌ Env SMTP failed on all ports:", lastError);
+  return { success: false, error: lastError };
 }
 
 export const emailService = new EmailService();

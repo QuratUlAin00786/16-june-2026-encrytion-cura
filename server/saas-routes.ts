@@ -221,7 +221,7 @@ Cura Software Limited
   }
 }
 
-const WELCOME_EMAIL_TIMEOUT_MS = 45_000;
+const WELCOME_EMAIL_TIMEOUT_MS = 60_000;
 
 async function sendWelcomeEmailWithTimeout(
   organization: any,
