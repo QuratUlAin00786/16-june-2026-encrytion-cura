@@ -297,7 +297,10 @@ export async function tenantMiddleware(req: TenantRequest, res: Response, next: 
 }
 
 export function resolveOrganizationId(req: TenantRequest): number {
-  const orgId = req.tenant?.id ?? req.user?.organizationId;
+  if (req.user?.organizationId != null) {
+    return Number(req.user.organizationId);
+  }
+  const orgId = req.tenant?.id;
   if (orgId == null || Number.isNaN(Number(orgId))) {
     throw new Error("Organization context required");
   }
@@ -382,19 +385,40 @@ export async function authMiddleware(req: TenantRequest, res: Response, next: Ne
       });
     }
 
-    // Ensure user belongs to the current tenant
+    // If tenant header resolved a different org than the JWT (common on IP-based production URLs),
+    // trust the authenticated user's organization from the token.
     if (req.tenant && payload.organizationId !== req.tenant.id) {
-      console.log(`[AUTH-MIDDLEWARE] ❌ Organization mismatch detected`);
-      console.log(`[AUTH-MIDDLEWARE] Token organizationId: ${payload.organizationId}`);
-      console.log(`[AUTH-MIDDLEWARE] Tenant organizationId: ${req.tenant.id}`);
-      console.log(`[AUTH-MIDDLEWARE] Tenant name: ${req.tenant.name}, Subdomain: ${req.tenant.subdomain}`);
-      console.log(`[AUTH-MIDDLEWARE] User ID: ${payload.userId}, Path: ${req.path}`);
-      console.log(`[AUTH-MIDDLEWARE] Request headers - X-Tenant-Subdomain: ${req.get("X-Tenant-Subdomain")}, Referer: ${req.get("referer")}`);
-      
-      return res.status(403).json({ 
-        error: "Access denied for this organization",
-        details: `Your account belongs to organization ${payload.organizationId}, but you're accessing organization ${req.tenant.id} (${req.tenant.name}). Please log in again with the correct subdomain.`
+      console.warn(`[AUTH-MIDDLEWARE] Tenant/JWT org mismatch — using JWT org ${payload.organizationId}`, {
+        tenantOrgId: req.tenant.id,
+        tenantSubdomain: req.tenant.subdomain,
+        headerSubdomain: req.get("X-Tenant-Subdomain"),
+        path: req.path,
       });
+      try {
+        const org = await storage.getOrganization(Number(payload.organizationId));
+        if (org) {
+          req.tenant = {
+            id: org.id,
+            name: org.name,
+            subdomain: org.subdomain,
+            region: org.region,
+            brandName: org.brandName || org.name,
+            settings: org.settings || {},
+          };
+          req.organizationId = org.id;
+        } else {
+          return res.status(403).json({
+            error: "Access denied for this organization",
+            details: "Your organization could not be verified. Please log in again.",
+          });
+        }
+      } catch (syncError) {
+        console.error("[AUTH-MIDDLEWARE] Failed to sync tenant from JWT:", syncError);
+        return res.status(403).json({
+          error: "Access denied for this organization",
+          details: `Your account belongs to organization ${payload.organizationId}, but the request targeted organization ${req.tenant.id}.`,
+        });
+      }
     }
 
     // Get user details (coerce to number - JWT decode can return strings in some runtimes)

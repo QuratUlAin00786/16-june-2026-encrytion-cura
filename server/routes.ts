@@ -11538,7 +11538,7 @@ ${clinicName}`;
     }
   });
 
-  app.get("/api/roles", tenantMiddleware, authMiddleware, async (req: TenantRequest, res) => {
+  app.get("/api/roles", authMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
     try {
       const organizationId = resolveOrganizationId(req);
       let roles = await storage.getRolesByOrganization(organizationId);
@@ -12515,7 +12515,7 @@ ${clinicName}`;
     }
   });
 
-  app.post("/api/roles", tenantMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
+  app.post("/api/roles", requireRole(["admin"]), async (req: TenantRequest, res) => {
     try {
       const organizationId = resolveOrganizationId(req);
       const permissionsPayload = preparePermissionsForValidation(req.body?.permissions);
@@ -12643,7 +12643,7 @@ ${clinicName}`;
     description: z.string().optional(),
   });
 
-  app.patch("/api/roles/:id", tenantMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
+  app.patch("/api/roles/:id", requireRole(["admin"]), async (req: TenantRequest, res) => {
     try {
       const organizationId = resolveOrganizationId(req);
       const roleId = Number(req.params.id);
@@ -12687,7 +12687,7 @@ ${clinicName}`;
     }
   });
 
-  app.delete("/api/roles/:id", tenantMiddleware, requireRole(["admin"]), async (req: TenantRequest, res) => {
+  app.delete("/api/roles/:id", requireRole(["admin"]), async (req: TenantRequest, res) => {
     try {
       const organizationId = resolveOrganizationId(req);
       const roleId = parseInt(req.params.id);

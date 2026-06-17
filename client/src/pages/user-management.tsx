@@ -7239,8 +7239,11 @@ export default function UserManagement() {
                 {rolesLoading ? (
                   <div className="text-center py-8">Loading roles...</div>
                 ) : rolesError ? (
-                  <div className="text-center py-8 text-red-600">
-                    Failed to load roles. Please refresh the page or try again.
+                  <div className="text-center py-8 text-red-600 space-y-2">
+                    <p>Failed to load roles.</p>
+                    <p className="text-xs text-gray-500 break-all px-4">
+                      {rolesError instanceof Error ? rolesError.message : String(rolesError)}
+                    </p>
                   </div>
                 ) : roles.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">

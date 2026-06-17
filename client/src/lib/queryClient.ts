@@ -53,6 +53,19 @@ async function throwIfResNotOk(res: Response) {
 }
 
 // Helper function to get the correct tenant subdomain
+const RESERVED_PATH_SEGMENTS = new Set([
+  "api", "__vite_ping", "saas", "forms", "assets", "public", "client", "landing",
+  "auth", "legal", "subscriptions", "subscription", "billing", "dashboard",
+  "patients", "appointments", "prescriptions", "imaging", "messaging", "settings",
+  "user-management", "analytics", "inventory", "calendar", "telemedicine",
+  "shifts", "automation", "quickbooks", "population-health", "mobile-health",
+  "ai-insights", "user-manual", "pharmacy-dashboard", "lab-technician-dashboard",
+]);
+
+function isIpHostname(hostname: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(":");
+}
+
 export function getTenantSubdomain(): string {
   // PRIMARY SOURCE: authenticated user's stored subdomain (keeps routes like /billing from overriding tenant)
   const userSubdomain = localStorage.getItem('user_subdomain');
@@ -70,10 +83,13 @@ export function getTenantSubdomain(): string {
   const pathname = window.location.pathname;
   const pathParts = pathname.split('/').filter(Boolean);
 
-  // PRIORITY: Path contains subdomain as first segment (e.g., /cura/forms ...)
+  // Path prefix is tenant subdomain (e.g. /myclinic/user-management)
   if (pathParts.length >= 1) {
     const candidate = pathParts[0];
-    if (candidate && candidate !== "api" && candidate !== "__vite_ping") {
+    if (
+      candidate &&
+      !RESERVED_PATH_SEGMENTS.has(candidate.toLowerCase())
+    ) {
       return candidate;
     }
   }
@@ -98,8 +114,13 @@ export function getTenantSubdomain(): string {
     return 'demo';
   }
 
+  // Bare IP deployments have no subdomain in hostname — never use "185" etc.
+  if (isIpHostname(hostname)) {
+    return 'demo';
+  }
+
   const parts = hostname.split('.');
-  if (parts.length >= 2) {
+  if (parts.length >= 3) {
     return parts[0] || 'demo';
   }
 
